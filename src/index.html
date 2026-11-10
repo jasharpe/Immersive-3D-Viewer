@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Immersive 3D Viewer</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' mfile: blob: data:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' mfile: blob: data:; connect-src 'self' mfile: blob: data:; worker-src 'self' blob:">
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../node_modules/three/build/three.module.js",
+        "three/addons/": "../node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo"></span>Immersive 3D Viewer</div>
+    <button class="btn" id="btn-open" title="Open a folder of models">Open folder…</button>
+    <div class="dropdown">
+      <button class="btn" id="btn-recent" title="Recently opened folders">Recent ▾</button>
+      <div class="menu hidden" id="menu-recent"></div>
+    </div>
+    <button class="btn icon" id="btn-rescan" title="Rescan folder for new or changed files"></button>
+    <div class="search">
+      <input id="search" type="search" placeholder="Search models…" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="top-opts">
+      <label title="Show one card per model when the same model exists in several formats (GLB/FBX/OBJ…)"><input type="checkbox" id="opt-collapse"> Group formats</label>
+      <label title="Nearest-neighbour texture filtering — crisp pixels for retro/PSX assets"><input type="checkbox" id="opt-pixel"> Pixelated</label>
+      <select id="opt-sort" title="Sort order">
+        <option value="name">Name</option>
+        <option value="folder">Folder</option>
+        <option value="size">Size</option>
+        <option value="date">Modified</option>
+      </select>
+      <input type="range" id="opt-size" min="96" max="280" step="8" title="Card size">
+    </div>
+    <button class="btn primary" id="btn-zoo" title="Walk around the models in the current view in first person">Enter Zoo</button>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar">
+      <section>
+        <h4>Formats</h4>
+        <div class="chips" id="ext-chips"></div>
+      </section>
+      <section>
+        <h4>Status</h4>
+        <div class="status-list" id="status-list"></div>
+      </section>
+      <section>
+        <h4>Textures</h4>
+        <button class="btn block" id="btn-missing">Missing textures…</button>
+        <button class="btn block" id="btn-texdirs">Texture search folders…</button>
+      </section>
+      <section class="folders-section">
+        <h4>Folders</h4>
+        <div class="tree" id="tree"></div>
+      </section>
+    </aside>
+
+    <section class="content">
+      <div class="selbar hidden" id="selbar">
+        <span class="selcount" id="selcount"></span>
+        <button class="btn" data-bulk="copy">Copy paths</button>
+        <button class="btn" data-bulk="texdir">Set texture folder…</button>
+        <button class="btn" data-bulk="teximg">Apply image to all materials…</button>
+        <button class="btn" data-bulk="reset">Reset textures</button>
+        <button class="btn" data-bulk="zoo">Zoo with selection</button>
+        <span class="spacer"></span>
+        <button class="btn ghost" data-bulk="none">Clear selection</button>
+      </div>
+      <div class="grid-scroll" id="grid-scroll">
+        <div class="grid-inner" id="grid"></div>
+      </div>
+      <div class="empty" id="empty">
+        <div class="empty-card">
+          <div class="empty-logo"></div>
+          <h2>Open a folder of 3D models</h2>
+          <p>GLB, glTF, FBX, OBJ, DAE, 3DS, STL and PLY files are found recursively.<br>Textures are located automatically in nearby folders.</p>
+          <button class="btn primary" id="btn-open-empty">Open folder…</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="splitter" id="splitter"></div>
+
+    <aside class="inspector" id="inspector">
+      <div class="viewer-wrap">
+        <div class="viewer-host" id="viewer-host"></div>
+        <div class="viewer-msg" id="viewer-msg">Select a model</div>
+        <div class="viewer-tools">
+          <button class="btn icon sm" data-vt="reset" title="Reset camera"></button>
+          <button class="btn icon sm" data-vt="rotate" title="Auto-rotate"></button>
+          <button class="btn icon sm" data-vt="wire" title="Wireframe"></button>
+          <button class="btn icon sm" data-vt="grid" title="Grid"></button>
+          <button class="btn icon sm" data-vt="bg" title="Background colour"></button>
+        </div>
+        <div class="drop-hint">Drop an image to apply it to all materials</div>
+      </div>
+      <div class="insp-scroll" id="insp"></div>
+    </aside>
+  </div>
+
+  <footer class="statusbar">
+    <span id="st-count"></span>
+    <span id="st-thumbs"></span>
+    <button class="btn ghost xs" id="btn-thumbs-pause"></button>
+    <span class="spacer"></span>
+    <span id="st-root" class="muted"></span>
+  </footer>
+
+  <div class="toast hidden" id="toast"></div>
+  <div class="ctx hidden" id="ctx"></div>
+  <div class="modal-root" id="modal-root"></div>
+  <div class="zoo-host hidden" id="zoo-host"></div>
+  <div class="busy hidden" id="busy"><div class="spinner"></div><div id="busy-msg">Scanning…</div></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
