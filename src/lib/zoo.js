@@ -212,12 +212,15 @@ export class Zoo {
     this.scene.add(post);
     const tex = textTexture(text, { font: 'bold 44px system-ui, sans-serif', bg: '#2b6cb0', fg: '#ffffff', pad: 22 });
     const h = 0.6;
-    const panel = new THREE.Mesh(
-      new THREE.PlaneGeometry(h * tex.userData.aspect, h),
-      new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }),
-    );
-    panel.position.set(x, 2.3, z + 0.08);
-    this.scene.add(panel);
+    // Two single-sided faces back to back so the text reads correctly from either side.
+    const geo = new THREE.PlaneGeometry(h * tex.userData.aspect, h);
+    const mat = new THREE.MeshBasicMaterial({ map: tex });
+    const front = new THREE.Mesh(geo, mat);
+    front.position.set(x, 2.3, z + 0.08);
+    const back = new THREE.Mesh(geo, mat);
+    back.rotation.y = Math.PI;
+    back.position.set(x, 2.3, z - 0.08);
+    this.scene.add(front, back);
   }
 
   addExhibit(item, x, z) {
