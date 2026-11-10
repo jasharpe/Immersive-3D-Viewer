@@ -200,7 +200,7 @@ input[type=checkbox] { accent-color: var(--accent); }
 .zoo.locked .zoo-crosshair { display: block; }
 .zoo-top { position: absolute; top: 12px; left: 14px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); font-size: 13px; }
 .zoo-help { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; color: rgba(255,255,255,.85); text-shadow: 0 1px 3px rgba(0,0,0,.9); font-size: 12px; }
-.zoo-hover { position: absolute; left: 50%; top: calc(50% + 28px); transform: translateX(-50%); background: rgba(15,17,21,.78); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 8px 12px; color: #fff; text-align: center; max-width: 70vw; pointer-events: none; }
+.zoo-hover { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); background: rgba(15,17,21,.78); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 8px 12px; color: #fff; text-align: center; max-width: 70vw; pointer-events: none; }
 .zoo-hover-name { font-weight: 700; font-size: 15px; }
 .zoo-hover-path { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: #b7c0cf; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zoo-hover-hint { font-size: 11px; color: #ffd34d; margin-top: 2px; }
