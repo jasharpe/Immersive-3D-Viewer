@@ -174,7 +174,7 @@ export class Zoo {
     this.bounds = { minX: -CELL * 3, maxX: maxX + CELL * 2, minZ: -ROW_GAP, maxZ: depth };
     this.addGround();
 
-    this.camera.position.set(CELL * 1.5, EYE, -ROW_GAP * 0.5);
+    this.camera.position.set(CELL * 1.5, EYE, -ROW_GAP * 0.9);
     this.camera.lookAt(CELL * 2.2, EYE * 0.8, 0);
   }
 
