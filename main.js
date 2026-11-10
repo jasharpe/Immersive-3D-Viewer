@@ -16,6 +16,9 @@ const SKIP_DIRS = new Set(['.git', '.svn', 'node_modules', '__MACOSX', '.Trash',
 const TEXTURE_DIR_RE = /tex|material|image|img|maps|\.fbm$|sprite/i;
 const MAX_NEARBY_IMAGES = 20000;
 
+// Dev/test: isolate settings and caches (see docs/DEVELOPMENT.md).
+if (process.env.I3DV_USER_DATA) app.setPath('userData', process.env.I3DV_USER_DATA);
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'mfile',
@@ -168,8 +171,9 @@ async function createWindow() {
 
   const saveBounds = async () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
+    const bounds = { ...mainWindow.getNormalBounds(), maximized: mainWindow.isMaximized() };
     const c = await readJson(configPath(), {});
-    c.window = { ...mainWindow.getNormalBounds(), maximized: mainWindow.isMaximized() };
+    c.window = bounds;
     await writeJsonAtomic(configPath(), c).catch(() => {});
   };
   mainWindow.on('close', saveBounds);
@@ -186,9 +190,12 @@ async function createWindow() {
 
 // Developer/test hooks, active only when the env vars are set (see docs/DEVELOPMENT.md).
 function runDevHooks(win) {
-  const script = process.env.MODELZOO_TEST_SCRIPT;
+  const script = process.env.I3DV_TEST_SCRIPT;
   if (!script) return;
   const code = fs.readFileSync(script, 'utf8');
+  win.webContents.on('console-message', (e) => {
+    if (e.level === 'error' || e.level === 'warning') console.log(`[renderer:${e.level}]`, e.message);
+  });
   win.webContents.executeJavaScript(`(async () => { ${code} })()`).then(
     (r) => { if (r !== undefined) console.log('[test]', typeof r === 'string' ? r : JSON.stringify(r)); },
     (e) => console.error('[test] error', e),
