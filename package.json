@@ -1,0 +1,62 @@
+{
+  "name": "immersive-3d-viewer",
+  "version": "0.1.0",
+  "description": "Desktop 3D model library viewer with a walkable first-person zoo mode",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "productName": "Immersive 3D Viewer",
+  "private": true,
+  "build": {
+    "appId": "com.jasharpe.immersive3dviewer",
+    "productName": "Immersive 3D Viewer",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "node_modules/three/build/**/*",
+      "node_modules/three/examples/jsm/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.graphics-design"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Graphics",
+      "maintainer": "Immersive 3D Viewer"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jasharpe/immersive_3d_viewer.git"
+  }
+}
