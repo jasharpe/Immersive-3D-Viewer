@@ -35,7 +35,7 @@ let draco = null;
 function getDraco() {
   if (!draco) {
     draco = new DRACOLoader();
-    draco.setDecoderPath(new URL('../../node_modules/three/examples/jsm/libs/draco/gltf/', import.meta.url).href);
+    draco.setDecoderPath(new URL('../vendor/three/addons/libs/draco/gltf/', import.meta.url).href);
   }
   return draco;
 }

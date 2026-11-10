@@ -8,7 +8,9 @@
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
     "dist": "electron-builder",
-    "dist:linux": "electron-builder --linux"
+    "dist:linux": "electron-builder --linux",
+    "postinstall": "node scripts/vendor-three.js",
+    "vendor": "node scripts/vendor-three.js"
   },
   "license": "UNLICENSED",
   "dependencies": {
@@ -26,10 +28,9 @@
     "files": [
       "main.js",
       "preload.js",
+      "package.json",
       "src/**/*",
-      "node_modules/three/build/**/*",
-      "node_modules/three/examples/jsm/**/*",
-      "package.json"
+      "!node_modules/**/*"
     ],
     "mac": {
       "target": [
