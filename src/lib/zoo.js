@@ -10,6 +10,8 @@ const PER_ROW = 12;
 const TARGET = 2.0; // normalised exhibit size (largest dimension, metres)
 const PED_R = 1.3;
 const PED_H = 0.3;
+// Models float this far above the pedestal so flat bases don't z-fight with its top.
+const HOVER = 0.02;
 const EYE = 1.7;
 const PLAYER_R = 0.35;
 const SKY = 0xb9c7d6;
@@ -230,7 +232,7 @@ export class Zoo {
     this.scene.add(ped);
 
     const holder = new THREE.Group();
-    holder.position.set(x, PED_H, z);
+    holder.position.set(x, PED_H + HOVER, z);
     this.scene.add(holder);
 
     const ph = new THREE.Mesh(this.placeholderGeo, this.placeholderMat);
@@ -301,8 +303,8 @@ export class Zoo {
       ex.mixer.clipAction(res.animations[0]).play();
     }
     const h = size.y * scale;
-    ex.label.position.y = PED_H + h + 0.35;
-    ex.hitBox.max.y = Math.max(ex.hitBox.max.y, PED_H + h + 0.1);
+    ex.label.position.y = PED_H + HOVER + h + 0.35;
+    ex.hitBox.max.y = Math.max(ex.hitBox.max.y, PED_H + HOVER + h + 0.1);
     const halfW = Math.max(size.x, size.z) * scale * 0.5;
     ex.hitBox.min.x = Math.min(ex.hitBox.min.x, ex.x - halfW);
     ex.hitBox.max.x = Math.max(ex.hitBox.max.x, ex.x + halfW);
