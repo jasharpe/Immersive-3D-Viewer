@@ -147,7 +147,7 @@ viewable. Click **Click to walk around** to start.
 | Mouse | Look |
 | `Shift` | Run |
 | `Space` | Jump (in fly mode: go up) |
-| `F` | Toggle fly / noclip |
+| `F` | Toggle fly / noclip. WASD still moves horizontally; use `Space` / `C` to change height |
 | `C` | Fly down |
 | Left click | Copy the path of the model under the crosshair |
 | `E` | Leave the Zoo and open the model under the crosshair in the inspector |

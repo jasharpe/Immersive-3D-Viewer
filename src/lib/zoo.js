@@ -373,11 +373,11 @@ export class Zoo {
   move(dt) {
     const k = this.keys;
     const speed = (k.has('ShiftLeft') || k.has('ShiftRight') ? 11 : 5) * (this.fly ? 1.6 : 1);
-    const fwd = new THREE.Vector3();
-    this.camera.getWorldDirection(fwd);
-    if (!this.fly) fwd.y = 0;
-    fwd.normalize();
-    const right = new THREE.Vector3().crossVectors(fwd, this.camera.up).normalize();
+    // WASD always moves horizontally (also in fly mode, where Space/C handle height).
+    // Use the camera's yaw so looking straight up or down doesn't stall movement.
+    const yaw = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ').y;
+    const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
     const wish = new THREE.Vector3();
     if (k.has('KeyW') || k.has('ArrowUp')) wish.add(fwd);
     if (k.has('KeyS') || k.has('ArrowDown')) wish.sub(fwd);
