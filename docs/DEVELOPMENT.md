@@ -21,6 +21,7 @@ src/
   vendor/three/         (generated, gitignored) copy of Three.js build + addons
 scripts/
   vendor-three.js       copies Three.js into src/vendor (postinstall)
+  dev-app-name.js       macOS: names the dev Electron.app for the Dock (postinstall)
   smoke-test.js         end-to-end check against a real model folder
 docs/                   this documentation
 ```
@@ -35,6 +36,7 @@ DevTools with `⌥⌘I` / `Ctrl+Shift+I`.
 |---|---|
 | `npm start` | Run the app from source |
 | `npm run vendor` | Re-copy Three.js into `src/vendor/three` (also runs on `postinstall`) |
+| `node scripts/dev-app-name.js` | macOS: rename the development Electron.app so the Dock shows "Immersive 3D Viewer" (also runs on `postinstall`) |
 | `npm run pack` | Build an unpacked app for the current OS into `dist/` (fast) |
 | `npm run dist:mac` / `dist:win` / `dist:linux` | Build installers (see README) |
 | `npm run dist` | Build for the current OS's default targets |

@@ -9,7 +9,7 @@
     "dist:win": "electron-builder --win",
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux",
-    "postinstall": "node scripts/vendor-three.js",
+    "postinstall": "node scripts/vendor-three.js && node scripts/dev-app-name.js",
     "vendor": "node scripts/vendor-three.js",
     "pack": "electron-builder --dir",
     "smoke": "node scripts/smoke-test.js"
