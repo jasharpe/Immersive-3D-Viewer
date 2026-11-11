@@ -1109,6 +1109,8 @@ function enterZoo(entries = S.entries) {
   S.zoo = new Zoo(host, items, {
     makeLoadOpts: loadOptsFor,
     pixelated: S.settings.pixelated,
+    scale: S.settings.zooScale || 1,
+    onScale: (scale) => { S.settings.zooScale = scale; saveSettings(); },
     onCopy: (it) => api.copy(it.path),
     onInspect: (it) => {
       const e = S.entries.find((x) => x.variants.some((v) => v.path === it.path));

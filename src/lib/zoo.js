@@ -1,26 +1,31 @@
 // First-person "zoo": every model in the current view stands on a pedestal, grouped
-// into rows by folder. Walk around with WASD + mouse; click a model to copy its path.
+// into rows by folder. Models are shown at their real size; +/- scales all of them.
+// Walk around with WASD + mouse; click a model to copy its path.
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { loadModel, boundsOf, createTextureCache, applyPixelated } from './loader.js';
+import { fmtDims } from './format.js';
 
-const CELL = 4.5; // spacing between exhibits along a row
-const ROW_GAP = 8; // spacing between rows
 const PER_ROW = 12;
-const TARGET = 2.0; // normalised exhibit size (largest dimension, metres)
-const PED_R = 1.3;
+const GAP_X = 1.0; // space between neighbouring pedestals
+const AISLE = 4.5; // walking space between rows
 const PED_H = 0.3;
+const MIN_PED_R = 0.35;
 // Models float this far above the pedestal so flat bases don't z-fight with its top.
 const HOVER = 0.02;
+const PLACEHOLDER = 0.5; // size of the stand-in box shown until a model loads
 const EYE = 1.7;
 const PLAYER_R = 0.35;
 const SKY = 0xb9c7d6;
+const SCALE_STEP = 1.25;
+const SCALE_MIN = 1 / 64;
+const SCALE_MAX = 64;
 
 export class Zoo {
   /**
    * @param host     element to fill
    * @param items    [{path, name, group, rel}]
-   * @param options  { makeLoadOpts(path), pixelated, onCopy(item), onInspect(item), onExit() }
+   * @param options  { makeLoadOpts(path), pixelated, scale, onScale(scale), onCopy(item), onInspect(item), onExit() }
    */
   constructor(host, items, options) {
     this.host = host;
@@ -28,6 +33,7 @@ export class Zoo {
     this.opts = options;
     this.texCache = createTextureCache();
     this.exhibits = [];
+    this.rows = [];
     this.keys = new Set();
     this.velocity = new THREE.Vector3();
     this.fly = false;
@@ -37,6 +43,7 @@ export class Zoo {
     this.hovered = null;
     this.loaded = 0;
     this.disposed = false;
+    this.scale = clampScale(options.scale ?? 1);
     this.lastTime = performance.now();
 
     this.buildDom();
@@ -54,9 +61,9 @@ export class Zoo {
     el.innerHTML = `
       <canvas></canvas>
       <div class="zoo-crosshair"></div>
-      <div class="zoo-top"><b>Zoo</b> · <span class="zoo-count"></span> <span class="zoo-loading"></span></div>
-      <div class="zoo-help">WASD move · Shift run · Space jump · F fly (Space/C up/down) · Click copy path · E inspect · Esc menu</div>
-      <div class="zoo-hover hidden"><div class="zoo-hover-name"></div><div class="zoo-hover-path"></div><div class="zoo-hover-hint">Click to copy path · E to inspect</div></div>
+      <div class="zoo-top"><b>Zoo</b> · <span class="zoo-count"></span> · <span class="zoo-scale"></span> <span class="zoo-loading"></span></div>
+      <div class="zoo-help">WASD move · Shift run · Space jump · F fly (Space/C up/down) · +/− scale · Click copy path · E inspect · Esc menu</div>
+      <div class="zoo-hover hidden"><div class="zoo-hover-name"></div><div class="zoo-hover-path"></div><div class="zoo-hover-size"></div><div class="zoo-hover-hint">Click to copy path · E to inspect</div></div>
       <div class="zoo-toast hidden"></div>
       <div class="zoo-menu">
         <div class="zoo-menu-card">
@@ -74,6 +81,9 @@ export class Zoo {
             <tr><td>Space</td><td>Jump (fly: up)</td></tr>
             <tr><td>F</td><td>Toggle fly / noclip</td></tr>
             <tr><td>C</td><td>Fly down</td></tr>
+            <tr><td>= +</td><td>Make models bigger</td></tr>
+            <tr><td>- _</td><td>Make models smaller</td></tr>
+            <tr><td>0</td><td>Real size</td></tr>
             <tr><td>Click</td><td>Copy model path</td></tr>
             <tr><td>E</td><td>Inspect model in viewer</td></tr>
             <tr><td>Esc</td><td>This menu</td></tr>
@@ -86,11 +96,12 @@ export class Zoo {
     this.canvas = el.querySelector('canvas');
     this.$ = (s) => el.querySelector(s);
     this.$('.zoo-count').textContent = `${this.items.length} exhibits`;
-    this.$('.zoo-menu-sub').textContent = `${this.items.length} models from the current view, grouped by folder.`;
+    this.$('.zoo-menu-sub').textContent = `${this.items.length} models from the current view at real size, grouped by folder.`;
     this.$('.zoo-resume').onclick = () => this.lock();
     this.$('.zoo-exit').onclick = () => this.exit();
     this.$('.zoo-labels').onchange = (e) => { this.showLabels = e.target.checked; };
     this.$('.zoo-anim').onchange = (e) => { this.animate = e.target.checked; };
+    this.updateScaleHud();
   }
 
   toast(msg) {
@@ -99,6 +110,10 @@ export class Zoo {
     t.classList.remove('hidden');
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => t.classList.add('hidden'), 1800);
+  }
+
+  updateScaleHud() {
+    this.$('.zoo-scale').textContent = this.scale === 1 ? 'real size' : `scale ×${fmtScale(this.scale)}`;
   }
 
   // ---------------------------------------------------------------- scene
@@ -111,10 +126,10 @@ export class Zoo {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(SKY);
-    scene.fog = new THREE.Fog(SKY, 35, 140);
+    scene.fog = new THREE.Fog(SKY, 40, 220);
     this.scene = scene;
 
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 500);
+    this.camera = new THREE.PerspectiveCamera(70, 1, 0.02, 1000);
     this.controls = new PointerLockControls(this.camera, this.canvas);
     this.controls.addEventListener('lock', () => this.el.classList.add('locked'));
     this.controls.addEventListener('unlock', () => { this.el.classList.remove('locked'); this.keys.clear(); });
@@ -124,22 +139,24 @@ export class Zoo {
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     const sc = sun.shadow.camera;
-    sc.left = sc.bottom = -28;
-    sc.right = sc.top = 28;
+    sc.left = sc.bottom = -40;
+    sc.right = sc.top = 40;
     sc.near = 1;
-    sc.far = 120;
+    sc.far = 250;
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.03;
     scene.add(sun, sun.target);
     this.sun = sun;
 
-    this.pedGeo = new THREE.CylinderGeometry(PED_R, PED_R + 0.1, PED_H, 40);
+    // Unit-radius pedestal, scaled in X/Z to fit each model's footprint.
+    this.pedGeo = new THREE.CylinderGeometry(1, 1.04, PED_H, 48);
     this.pedMat = new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: 0.85 });
     this.pedHot = new THREE.MeshStandardMaterial({ color: 0xffc94d, roughness: 0.6, emissive: 0x6b4a00 });
-    this.placeholderGeo = new THREE.BoxGeometry(1, 1, 1);
+    this.placeholderGeo = new THREE.BoxGeometry(PLACEHOLDER, PLACEHOLDER, PLACEHOLDER);
     this.placeholderMat = new THREE.MeshBasicMaterial({ color: 0x7a8aa0, wireframe: true });
     this.failedMat = new THREE.MeshBasicMaterial({ color: 0xd04545, wireframe: true });
 
+    this.addGround();
     new ResizeObserver(() => this.resize()).observe(this.host);
     this.resize();
   }
@@ -152,38 +169,7 @@ export class Zoo {
     this.camera.updateProjectionMatrix();
   }
 
-  layout() {
-    // Group by folder, keep order stable.
-    const groups = new Map();
-    for (const it of this.items) {
-      if (!groups.has(it.group)) groups.set(it.group, []);
-      groups.get(it.group).push(it);
-    }
-    let row = 0;
-    let maxX = 0;
-    for (const [name, list] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      this.addSign(name || '(library root)', -CELL * 0.9, row * ROW_GAP);
-      list.forEach((item, i) => {
-        if (i > 0 && i % PER_ROW === 0) row++;
-        const x = (i % PER_ROW) * CELL + CELL * 0.6;
-        const z = row * ROW_GAP;
-        maxX = Math.max(maxX, x);
-        this.addExhibit(item, x, z);
-      });
-      row++;
-    }
-    const depth = Math.max(row, 1) * ROW_GAP;
-    this.bounds = { minX: -CELL * 3, maxX: maxX + CELL * 2, minZ: -ROW_GAP, maxZ: depth };
-    this.addGround();
-
-    this.camera.position.set(CELL * 1.5, EYE, -ROW_GAP * 0.9);
-    this.camera.lookAt(CELL * 2.2, EYE * 0.8, 0);
-  }
-
   addGround() {
-    const b = this.bounds;
-    const w = b.maxX - b.minX + 80;
-    const d = b.maxZ - b.minZ + 80;
     const c = document.createElement('canvas');
     c.width = c.height = 256;
     const g = c.getContext('2d');
@@ -198,60 +184,142 @@ export class Zoo {
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(w / 2, d / 2);
+    const size = 4000; // effectively endless; fog hides the edge
+    tex.repeat.set(size / 2, size / 2);
     tex.anisotropy = 8;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set((b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2);
     ground.receiveShadow = true;
     this.scene.add(ground);
   }
 
-  addSign(text, x, z) {
+  // ---------------------------------------------------------------- layout
+  layout() {
+    // One or more rows per folder, folders in name order.
+    const groups = new Map();
+    for (const it of this.items) {
+      if (!groups.has(it.group)) groups.set(it.group, []);
+      groups.get(it.group).push(it);
+    }
+    for (const [name, list] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      for (let i = 0; i < list.length; i += PER_ROW) {
+        const row = { exhibits: [], sign: i === 0 ? this.makeSign(name || '(library root)') : null, z: 0, cz: null };
+        for (const item of list.slice(i, i + PER_ROW)) row.exhibits.push(this.makeExhibit(item));
+        this.rows.push(row);
+      }
+    }
+    this.relayout(true);
+    this.camera.position.set(3, EYE, -AISLE * 0.8);
+    this.camera.lookAt(5, EYE * 0.6, 2);
+  }
+
+  /** Pedestal radius that fits the model's footprint at the current scale. */
+  pedRadius(ex) {
+    if (!ex.size) return MIN_PED_R + 0.1;
+    const half = Math.hypot(ex.size.x, ex.size.z) * 0.5 * this.scale;
+    return Math.max(MIN_PED_R, half * 1.05 + 0.08);
+  }
+
+  /** Computes target positions; exhibits glide there in tick() (or snap when asked). */
+  relayout(snap = false) {
+    let z = 0;
+    let maxX = 0;
+    for (const row of this.rows) {
+      let depth = 0;
+      for (const ex of row.exhibits) { ex.tr = this.pedRadius(ex); depth = Math.max(depth, ex.tr * 2); }
+      row.z = z + depth / 2;
+      let x = 0;
+      for (const ex of row.exhibits) {
+        ex.tx = x + ex.tr;
+        ex.tz = row.z;
+        x += ex.tr * 2 + GAP_X;
+      }
+      maxX = Math.max(maxX, x);
+      z += depth + AISLE;
+    }
+    this.bounds = { minX: -10, maxX: maxX + 10, minZ: -AISLE * 3, maxZ: z + 5 };
+    if (snap) {
+      for (const ex of this.exhibits) { ex.cx = ex.tx; ex.cz = ex.tz; ex.r = ex.tr; ex.g = this.scale; this.place(ex); }
+      for (const row of this.rows) { row.cz = row.z; this.placeSign(row); }
+    }
+  }
+
+  makeSign(text) {
+    const group = new THREE.Group();
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.4, 0.12), new THREE.MeshStandardMaterial({ color: 0x4a4f57 }));
-    post.position.set(x, 1.2, z);
+    post.position.y = 1.2;
     post.castShadow = true;
-    this.scene.add(post);
     const tex = textTexture(text, { font: 'bold 44px system-ui, sans-serif', bg: '#2b6cb0', fg: '#ffffff', pad: 22 });
     const h = 0.6;
     // Two single-sided faces back to back so the text reads correctly from either side.
     const geo = new THREE.PlaneGeometry(h * tex.userData.aspect, h);
     const mat = new THREE.MeshBasicMaterial({ map: tex });
     const front = new THREE.Mesh(geo, mat);
-    front.position.set(x, 2.3, z + 0.08);
+    front.position.set(0, 2.3, 0.08);
     const back = new THREE.Mesh(geo, mat);
     back.rotation.y = Math.PI;
-    back.position.set(x, 2.3, z - 0.08);
-    this.scene.add(front, back);
+    back.position.set(0, 2.3, -0.08);
+    group.add(post, front, back);
+    this.scene.add(group);
+    return group;
   }
 
-  addExhibit(item, x, z) {
+  placeSign(row) {
+    if (row.sign) row.sign.position.set(-1.5, 0, row.cz);
+  }
+
+  makeExhibit(item) {
     const ped = new THREE.Mesh(this.pedGeo, this.pedMat);
-    ped.position.set(x, PED_H / 2, z);
     ped.castShadow = ped.receiveShadow = true;
     this.scene.add(ped);
 
-    const holder = new THREE.Group();
-    holder.position.set(x, PED_H + HOVER, z);
+    const holder = new THREE.Group(); // scaled by the zoo scale; holds the model at real size
     this.scene.add(holder);
 
-    const ph = new THREE.Mesh(this.placeholderGeo, this.placeholderMat);
-    ph.position.y = 0.5;
-    holder.add(ph);
+    const placeholder = new THREE.Mesh(this.placeholderGeo, this.placeholderMat);
+    this.scene.add(placeholder);
 
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTexture(item.name, { font: '600 34px system-ui, sans-serif', bg: 'rgba(20,22,28,0.78)', fg: '#fff', pad: 14 }), depthWrite: false }));
     const lh = 0.28;
     label.scale.set(lh * label.material.map.userData.aspect, lh, 1);
-    label.position.set(x, PED_H + 1.4, z);
     this.scene.add(label);
 
-    const hitBox = new THREE.Box3(new THREE.Vector3(x - PED_R, 0, z - PED_R), new THREE.Vector3(x + PED_R, PED_H + 1.1, z + PED_R));
-    this.exhibits.push({ item, x, z, ped, holder, placeholder: ph, label, hitBox, mixer: null, result: null });
+    const ex = { item, ped, holder, placeholder, label, size: null, hitBox: new THREE.Box3(), mixer: null, result: null, cx: 0, cz: 0, tx: 0, tz: 0, r: 0, tr: 0, g: this.scale };
+    this.exhibits.push(ex);
+    return ex;
+  }
+
+  /** Applies an exhibit's current position/scale to its objects and hit box. */
+  place(ex) {
+    const { cx, cz, r, g } = ex;
+    ex.ped.position.set(cx, PED_H / 2, cz);
+    ex.ped.scale.set(r, 1, r);
+    ex.holder.position.set(cx, PED_H + HOVER, cz);
+    ex.holder.scale.setScalar(g);
+    ex.placeholder.position.set(cx, PED_H + HOVER + PLACEHOLDER / 2, cz);
+    const h = ex.size ? ex.size.y * g : PLACEHOLDER;
+    const hx = ex.size ? Math.max(ex.size.x * g * 0.5, r) : r;
+    const hz = ex.size ? Math.max(ex.size.z * g * 0.5, r) : r;
+    const top = PED_H + HOVER + h;
+    ex.label.position.set(cx, top + 0.3, cz);
+    ex.hitBox.min.set(cx - hx, 0, cz - hz);
+    ex.hitBox.max.set(cx + hx, Math.max(top, PED_H + 0.3), cz + hz);
+  }
+
+  setScale(s) {
+    const next = clampScale(s);
+    if (next === this.scale) return;
+    this.scale = next;
+    this.relayout(false);
+    this.updateScaleHud();
+    this.toast(next === 1 ? 'Real size' : `Scale ×${fmtScale(next)}  (0 = real size)`);
+    this.opts.onScale?.(next);
   }
 
   // ---------------------------------------------------------------- loading
   async loadAll() {
-    const order = [...this.exhibits].sort((a, b) => dist2(a, this.camera.position) - dist2(b, this.camera.position));
+    const cam = this.camera.position;
+    const order = [...this.exhibits].sort((a, b) => dist2(a.tx, a.tz, cam) - dist2(b.tx, b.tz, cam));
     let next = 0;
     const worker = async () => {
       while (!this.disposed && next < order.length) {
@@ -283,33 +351,27 @@ export class Zoo {
     const obj = res.object;
     const box = boundsOf(obj);
     if (!box) { res.dispose(); ex.placeholder.material = this.failedMat; return; }
-    const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
-    const scale = TARGET / Math.max(size.x, size.y, size.z, 1e-6);
+    // Centre the footprint on the pedestal with the model's lowest point at the top.
     const inner = new THREE.Group();
     obj.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
     inner.add(obj);
-    inner.scale.setScalar(scale);
     // Most assets face +Z; turn them toward the visitor, who starts on the -Z side of each row.
     inner.rotation.y = Math.PI;
     obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = !o.isSkinnedMesh; } });
     if (this.opts.pixelated) applyPixelated(obj);
 
-    ex.holder.remove(ex.placeholder);
+    this.scene.remove(ex.placeholder);
     ex.holder.add(inner);
     ex.result = res;
+    ex.size = box.getSize(new THREE.Vector3());
     if (res.animations.length) {
       ex.mixer = new THREE.AnimationMixer(obj);
       ex.mixer.clipAction(res.animations[0]).play();
     }
-    const h = size.y * scale;
-    ex.label.position.y = PED_H + HOVER + h + 0.35;
-    ex.hitBox.max.y = Math.max(ex.hitBox.max.y, PED_H + HOVER + h + 0.1);
-    const halfW = Math.max(size.x, size.z) * scale * 0.5;
-    ex.hitBox.min.x = Math.min(ex.hitBox.min.x, ex.x - halfW);
-    ex.hitBox.max.x = Math.max(ex.hitBox.max.x, ex.x + halfW);
-    ex.hitBox.min.z = Math.min(ex.hitBox.min.z, ex.z - halfW);
-    ex.hitBox.max.z = Math.max(ex.hitBox.max.z, ex.z + halfW);
+    // Footprints are only known once loaded, so neighbours make room as models arrive.
+    this.relayout(false);
+    if (this.hovered === ex) this.showHover(ex);
   }
 
   // ---------------------------------------------------------------- input
@@ -322,7 +384,11 @@ export class Zoo {
       e.preventDefault();
       e.stopPropagation();
       this.keys.add(e.code);
+      // Scale keys repeat while held.
+      if (e.code === 'Equal' || e.code === 'NumpadAdd') this.setScale(this.scale * SCALE_STEP);
+      if (e.code === 'Minus' || e.code === 'NumpadSubtract') this.setScale(this.scale / SCALE_STEP);
       if (e.repeat) return;
+      if (e.code === 'Digit0' || e.code === 'Numpad0') this.setScale(1);
       if (e.code === 'KeyF') { this.fly = !this.fly; this.velocity.y = 0; this.toast(this.fly ? 'Fly mode on' : 'Fly mode off'); }
       if (e.code === 'Space' && !this.fly && this.onGround) { this.velocity.y = 5.5; this.onGround = false; }
       if (e.code === 'KeyE' && this.hovered) { const it = this.hovered.item; this.exit(); this.opts.onInspect?.(it); }
@@ -354,17 +420,34 @@ export class Zoo {
     const dt = Math.min((now - this.lastTime) / 1000, 0.05);
     this.lastTime = now;
     if (this.controls.isLocked) this.move(dt);
+
+    // Glide exhibits and signs toward their layout targets.
+    const k = 1 - Math.exp(-dt * 10);
+    for (const ex of this.exhibits) {
+      if (Math.abs(ex.tx - ex.cx) + Math.abs(ex.tz - ex.cz) + Math.abs(ex.tr - ex.r) + Math.abs(this.scale - ex.g) < 1e-4) continue;
+      ex.cx += (ex.tx - ex.cx) * k;
+      ex.cz += (ex.tz - ex.cz) * k;
+      ex.r += (ex.tr - ex.r) * k;
+      ex.g += (this.scale - ex.g) * k;
+      if (Math.abs(this.scale - ex.g) < 1e-4 * this.scale) ex.g = this.scale;
+      this.place(ex);
+    }
+    for (const row of this.rows) {
+      if (Math.abs(row.z - row.cz) < 1e-4) continue;
+      row.cz += (row.z - row.cz) * k;
+      this.placeSign(row);
+    }
+
     this.updateHover();
 
     const cam = this.camera.position;
-    this.sun.position.set(cam.x + 20, 40, cam.z + 15);
+    this.sun.position.set(cam.x + 30, 80, cam.z + 20);
     this.sun.target.position.set(cam.x, 0, cam.z);
 
-    const near2 = 16 * 16;
     for (const ex of this.exhibits) {
-      const d2 = dist2(ex, cam);
-      ex.label.visible = this.showLabels && (d2 < near2 || ex === this.hovered);
-      if (ex.mixer && this.animate && d2 < 40 * 40) ex.mixer.update(dt);
+      const d = ex.hitBox.distanceToPoint(cam);
+      ex.label.visible = this.showLabels && (d < 12 || ex === this.hovered);
+      if (ex.mixer && this.animate && d < 60) ex.mixer.update(dt);
       if (!ex.result) ex.placeholder.rotation.y += dt * 0.6;
     }
     if (this.flash > 0) this.flash -= dt;
@@ -403,20 +486,22 @@ export class Zoo {
     if (p.y <= EYE) { p.y = EYE; this.velocity.y = 0; this.onGround = true; }
 
     // Pedestal collisions (circles).
-    const minD = PED_R + 0.1 + PLAYER_R;
-    for (const ex of this.exhibits) {
-      const dx = p.x - ex.x;
-      const dz = p.z - ex.z;
-      const d2 = dx * dx + dz * dz;
-      if (d2 < minD * minD && p.y - EYE < PED_H) {
-        const d = Math.sqrt(d2) || 1e-4;
-        p.x = ex.x + (dx / d) * minD;
-        p.z = ex.z + (dz / d) * minD;
+    if (p.y - EYE < PED_H) {
+      for (const ex of this.exhibits) {
+        const minD = ex.r + PLAYER_R;
+        const dx = p.x - ex.cx;
+        const dz = p.z - ex.cz;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < minD * minD) {
+          const d = Math.sqrt(d2) || 1e-4;
+          p.x = ex.cx + (dx / d) * minD;
+          p.z = ex.cz + (dz / d) * minD;
+        }
       }
     }
     const b = this.bounds;
-    p.x = THREE.MathUtils.clamp(p.x, b.minX - 20, b.maxX + 20);
-    p.z = THREE.MathUtils.clamp(p.z, b.minZ - 20, b.maxZ + 20);
+    p.x = THREE.MathUtils.clamp(p.x, b.minX - 30, b.maxX + 30);
+    p.z = THREE.MathUtils.clamp(p.z, b.minZ - 30, b.maxZ + 30);
   }
 
   updateHover() {
@@ -425,9 +510,9 @@ export class Zoo {
     this.camera.getWorldDirection(ray.direction);
     const hit = new THREE.Vector3();
     let best = null;
-    let bestD = 30;
+    let bestD = 80;
     for (const ex of this.exhibits) {
-      if (dist2(ex, ray.origin) > 40 * 40) continue;
+      if (ex.hitBox.distanceToPoint(ray.origin) > bestD) continue;
       if (ray.intersectBox(ex.hitBox, hit)) {
         const d = hit.distanceTo(ray.origin);
         if (d < bestD) { bestD = d; best = ex; }
@@ -436,15 +521,19 @@ export class Zoo {
     if (best === this.hovered) return;
     if (this.hovered) this.hovered.ped.material = this.pedMat;
     this.hovered = best;
-    const box = this.$('.zoo-hover');
     if (best) {
       best.ped.material = this.pedHot;
-      this.$('.zoo-hover-name').textContent = best.item.name;
-      this.$('.zoo-hover-path').textContent = best.item.rel;
-      box.classList.remove('hidden');
+      this.showHover(best);
     } else {
-      box.classList.add('hidden');
+      this.$('.zoo-hover').classList.add('hidden');
     }
+  }
+
+  showHover(ex) {
+    this.$('.zoo-hover-name').textContent = ex.item.name;
+    this.$('.zoo-hover-path').textContent = ex.item.rel;
+    this.$('.zoo-hover-size').textContent = ex.size ? fmtDims(ex.size.toArray()) + (this.scale === 1 ? '' : ` (shown ×${fmtScale(this.scale)})`) : '';
+    this.$('.zoo-hover').classList.remove('hidden');
   }
 
   // ---------------------------------------------------------------- teardown
@@ -469,9 +558,19 @@ export class Zoo {
   }
 }
 
-function dist2(ex, p) {
-  const dx = ex.x - p.x;
-  const dz = ex.z - p.z;
+function clampScale(s) {
+  // Snap back to exactly 1 when stepping returns to real size.
+  if (Math.abs(Math.log(s)) < 1e-6) return 1;
+  return Math.min(SCALE_MAX, Math.max(SCALE_MIN, s));
+}
+
+function fmtScale(s) {
+  return s >= 10 ? s.toFixed(0) : s >= 1 ? s.toFixed(2).replace(/\.?0+$/, '') : s.toPrecision(2);
+}
+
+function dist2(x, z, p) {
+  const dx = x - p.x;
+  const dz = z - p.z;
   return dx * dx + dz * dz;
 }
 
