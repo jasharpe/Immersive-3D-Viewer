@@ -165,7 +165,7 @@ most three at once, well within Chromium's limit.
 | What | Where | Format |
 |---|---|---|
 | App config (window bounds, recent folders, UI settings) | `userData/config.json` | JSON |
-| Library state | `userData/libraries/<sha1(root)[0:16]>/state.json` | `{ version, overrides, remap, meta, textureDirs, hearts, views, zooScales }`. `hearts` maps model path → time hearted, `views` maps model path → saved camera `{ position, target }`, and `zooScales` maps model path → Zoo display scale (absent = real size). `meta[path].size` is the model's `[x, y, z]` size in metres |
+| Library state | `userData/libraries/<sha1(root)[0:16]>/state.json` | `{ version, overrides, remap, meta, textureDirs, hearts, views, zooScales }`. `hearts` maps model path → time hearted, `views` maps model path → saved camera `{ position, target }`, `zooScales` maps model path → Zoo display scale (absent = real size), and `scroll` maps a view id (folder, status, formats) → `{ k, f, y }`: the entry key whose row is at the top, the fraction of a row scrolled past it, and the pixel fallback. Scroll changes don't trigger a save themselves; they go with the next one, on library switch, or on quit. `meta[path].size` is the model's `[x, y, z]` size in metres |
 | Thumbnails | `userData/libraries/<…>/thumbs/<sha1(modelPath)[0:24]>.png` | 256×256 PNG |
 
 Writes are atomic (write to a temp file, then rename). Library state is saved with a short

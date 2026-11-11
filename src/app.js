@@ -42,7 +42,7 @@ const S = {
 };
 
 function defaultLibState() {
-  return { version: 1, overrides: {}, remap: {}, meta: {}, textureDirs: [], hearts: {}, views: {}, zooScales: {} };
+  return { version: 1, overrides: {}, remap: {}, meta: {}, textureDirs: [], hearts: {}, views: {}, zooScales: {}, scroll: {} };
 }
 
 const lib = () => ({ root: S.root, state: S.state });
@@ -80,22 +80,25 @@ function fmtSize(n) {
 const fmtNum = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n));
 
 let saveTimer = null;
+// Scroll positions change constantly; they ride along with the next save rather than causing one.
+let scrollDirty = false;
 function saveStateSoon() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { saveTimer = null; if (S.root) api.libSave(S.root, S.state); }, 1200);
+  saveTimer = setTimeout(() => { saveTimer = null; scrollDirty = false; if (S.root) api.libSave(S.root, S.state); }, 1200);
 }
 
-/** Writes a pending debounced save now (before switching libraries). */
+/** Writes pending changes now (before switching libraries). */
 function flushStateSave() {
-  if (!saveTimer) return;
+  if (!saveTimer && !scrollDirty) return;
   clearTimeout(saveTimer);
   saveTimer = null;
+  scrollDirty = false;
   if (S.root) api.libSave(S.root, S.state);
 }
 
-// Flush a pending debounced save when the window closes or reloads.
+// Flush pending changes when the window closes or reloads.
 window.addEventListener('beforeunload', () => {
-  if (saveTimer && S.root) { clearTimeout(saveTimer); saveTimer = null; api.libSaveSync(S.root, S.state); }
+  if ((saveTimer || scrollDirty) && S.root) { clearTimeout(saveTimer); saveTimer = null; scrollDirty = false; api.libSaveSync(S.root, S.state); }
 });
 
 function saveSettings() {
@@ -142,6 +145,7 @@ async function openLibrary(root) {
     S.active = null;
     S.filters.folder = '';
     S.filters.missingName = null;
+    S.view = undefined; // force the scroll position to be restored for this library
     S.expanded = new Set(['']);
     S.recent = [root, ...S.recent.filter((r) => r !== root)].slice(0, 10);
     saveSettings();
@@ -335,6 +339,49 @@ function refresh() {
   updateStatusCounts();
   updateSelbar();
   layoutGrid(true);
+  // Switching to another view (folder, status, formats, search) restores where you last were
+  // in that view; refreshing the same view (hearts, overrides, sort) leaves the scroll alone.
+  const view = viewId();
+  if (view !== S.view) {
+    S.view = view;
+    restoreScroll();
+  }
+}
+
+/** Identifies the current view. Search results count as a view but aren't remembered. */
+function viewId() {
+  const f = S.filters;
+  return [f.folder, f.status, f.missingName || '', [...f.exts].sort().join(','), f.q].join('|');
+}
+const scrollKey = () => (S.filters.q ? null : S.view);
+
+/**
+ * Scroll positions are remembered as "this entry's row is at the top, f rows scrolled past
+ * it", so they survive window and card size changes; y (pixels) is the fallback when that
+ * entry is no longer in the view.
+ */
+function recordScroll() {
+  const k = scrollKey();
+  if (k == null || !S.root || !S.entries.length) return;
+  const rowH = grid.cardH + grid.gap;
+  const y = scrollEl.scrollTop;
+  const prev = S.state.scroll[k];
+  if (y < 1) { if (prev) { delete S.state.scroll[k]; scrollDirty = true; } return; }
+  const row = Math.floor(y / rowH);
+  const e = S.entries[Math.min(S.entries.length - 1, row * grid.cols)];
+  const f = +(y / rowH - row).toFixed(3);
+  if (prev && prev.k === e.key && prev.f === f) return;
+  S.state.scroll[k] = { k: e.key, f, y: Math.round(y) };
+  scrollDirty = true;
+}
+
+function restoreScroll() {
+  const rec = S.state.scroll?.[scrollKey()];
+  if (!rec) { scrollEl.scrollTop = 0; return; }
+  const e = S.entryByKey.get(rec.k);
+  const rowH = grid.cardH + grid.gap;
+  scrollEl.scrollTop = e ? (Math.floor(e.index / grid.cols) + rec.f) * rowH : rec.y;
+  renderVisible();
 }
 
 const fmtRank = (ext) => { const i = FORMAT_ORDER.indexOf(ext); return i < 0 ? 99 : i; };
@@ -482,7 +529,7 @@ function renderVisible() {
   thumbs.setVisible(visibleModels);
 }
 
-scrollEl.addEventListener('scroll', () => requestAnimationFrame(renderVisible), { passive: true });
+scrollEl.addEventListener('scroll', () => requestAnimationFrame(() => { renderVisible(); recordScroll(); }), { passive: true });
 new ResizeObserver(() => layoutGrid(false)).observe(scrollEl);
 
 function createCard(e) {
@@ -1311,7 +1358,7 @@ let searchTimer = null;
 $('#search').placeholder = `Search models… (${MOD}F)`;
 $('#search').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { S.filters.q = e.target.value; refresh(); scrollEl.scrollTop = 0; }, 90);
+  searchTimer = setTimeout(() => { S.filters.q = e.target.value; refresh(); }, 90);
 });
 
 $('#opt-collapse').onchange = (e) => { S.settings.collapse = e.target.checked; S.selection.clear(); saveSettings(); refresh(); };

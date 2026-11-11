@@ -35,6 +35,11 @@ startup. The ⟳ button rescans the folder after you add or change files.
 
 The status counts fill in as the background analysis runs (see *Thumbnails* below).
 
+Each view (a folder, a status such as *All models* or *♥ Hearted*, and format filters)
+remembers how far down you'd scrolled. Going back to it puts you where you left off, even
+after restarting the app. Search results always start at the top, and clearing the search
+returns you to where you were.
+
 ### Group formats
 
 Asset packs often ship the same model as GLB, FBX, OBJ and DAE. With **Group formats** on
