@@ -25,7 +25,7 @@ export class Zoo {
   /**
    * @param host     element to fill
    * @param items    [{path, name, group, rel}]
-   * @param options  { makeLoadOpts(path), pixelated, scale, onScale(scale), onCopy(item),
+   * @param options  { makeLoadOpts(path), startAt (path to spawn in front of), pixelated, scale, onScale(scale), onCopy(item),
    *                   isHearted(item), onToggleHeart(item) → bool, onInspect(item), onExit() }
    */
   constructor(host, items, options) {
@@ -134,6 +134,7 @@ export class Zoo {
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.02, 1000);
     this.controls = new PointerLockControls(this.camera, this.canvas);
     this.controls.addEventListener('lock', () => this.el.classList.add('locked'));
+    this.controls.addEventListener('change', () => { this.following = false; }); // mouse look
     this.controls.addEventListener('unlock', () => { this.el.classList.remove('locked'); this.keys.clear(); });
 
     scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x6b6250, 1.9));
@@ -213,6 +214,23 @@ export class Zoo {
     this.relayout(true);
     this.camera.position.set(3, EYE, -AISLE * 0.8);
     this.camera.lookAt(5, EYE * 0.6, 2);
+    // Spawn facing the model that was selected in the library. Rows re-flow while models
+    // load, so keep following it until the visitor first moves or looks around.
+    this.startEx = this.exhibits.find((ex) => ex.item.path === this.opts.startAt) || null;
+    this.following = !!this.startEx;
+    if (this.following) this.faceStart();
+  }
+
+  /** Puts the camera on the visitor's side of the start exhibit, far enough back to see it whole. */
+  faceStart() {
+    const ex = this.startEx;
+    const g = this.scale;
+    const h = ex.size ? ex.size.y * g : PLACEHOLDER;
+    const w = ex.size ? Math.max(ex.size.x, ex.size.z) * g : PLACEHOLDER;
+    const halfFov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
+    const dist = Math.max(ex.r + 1.2, (Math.max(h, w) * 0.65) / Math.tan(halfFov));
+    this.camera.position.set(ex.cx, EYE, ex.cz - dist);
+    this.camera.lookAt(ex.cx, PED_H + HOVER + h * 0.5, ex.cz);
   }
 
   /** Pedestal radius that fits the model's footprint at the current scale. */
@@ -464,6 +482,7 @@ export class Zoo {
       this.placeSign(row);
     }
 
+    if (this.following) this.faceStart();
     this.updateHover();
 
     const cam = this.camera.position;
@@ -495,6 +514,7 @@ export class Zoo {
     if (k.has('KeyD') || k.has('ArrowRight')) wish.add(right);
     if (k.has('KeyA') || k.has('ArrowLeft')) wish.sub(right);
     if (wish.lengthSq() > 0) wish.normalize().multiplyScalar(speed);
+    if (wish.lengthSq() > 0 || k.has('Space') || k.has('KeyC')) this.following = false;
 
     const p = this.camera.position;
     if (this.fly) {

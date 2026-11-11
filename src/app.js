@@ -1204,17 +1204,23 @@ $('#btn-texdirs').onclick = textureDirsModal;
 // ---------------------------------------------------------------------------- zoo
 function enterZoo(entries = S.entries) {
   if (!S.root || !entries.length) { toast('Nothing to show — open a folder or clear filters'); return; }
+  // Start in front of the model selected in the library (if it's part of this zoo).
+  const activeIdx = S.active ? entries.findIndex((e) => e.variants.some((v) => v.path === S.active)) : -1;
   let list = entries;
   if (list.length > ZOO_MAX) {
-    toast(`Showing the first ${ZOO_MAX} of ${list.length} models — narrow the view with search, folders or a selection`, 5000);
-    list = list.slice(0, ZOO_MAX);
+    // Take the models around the selected one rather than always the first ones.
+    const start = activeIdx < 0 ? 0 : Math.max(0, Math.min(activeIdx - ZOO_MAX / 2, list.length - ZOO_MAX));
+    toast(`Showing ${ZOO_MAX} of ${list.length} models${activeIdx < 0 ? '' : ' around the selected one'} — narrow the view with search, folders or a selection`, 5000);
+    list = list.slice(start, start + ZOO_MAX);
   }
   const items = list.map((e) => ({ path: e.model.path, name: e.model.name, rel: e.model.rel, group: e.model.relDir }));
+  const startAt = activeIdx >= 0 ? entries[activeIdx].model.path : null;
   const host = $('#zoo-host');
   host.classList.remove('hidden');
   hideMenu();
   S.zoo = new Zoo(host, items, {
     makeLoadOpts: loadOptsFor,
+    startAt,
     pixelated: S.settings.pixelated,
     scale: S.settings.zooScale || 1,
     onScale: (scale) => { S.settings.zooScale = scale; saveSettings(); },

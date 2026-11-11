@@ -157,8 +157,10 @@ textures. Right-click → **Regenerate thumbnail** forces it.
 ## The Zoo
 
 Click **Enter Zoo** to walk among the models currently shown in the grid, or select models
-and use **Zoo with selection**. The Zoo holds up to 400 models, so for large libraries,
-narrow the view first with search, folders or a selection.
+and use **Zoo with selection**. You start in front of the model you had selected in the
+library, facing it. The Zoo holds up to 400 models. For bigger views it takes the 400
+around your selected model, or you can narrow the view first with search, folders or a
+selection.
 
 Models stand on pedestals in rows, one row (or more) per folder, with a blue sign naming the
 folder. Models are shown at their **real size**, using the units stored in the file. Spacing and
