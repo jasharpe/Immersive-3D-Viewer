@@ -82,7 +82,15 @@ const fmtNum = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1
 let saveTimer = null;
 function saveStateSoon() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { if (S.root) api.libSave(S.root, S.state); }, 1200);
+  saveTimer = setTimeout(() => { saveTimer = null; if (S.root) api.libSave(S.root, S.state); }, 1200);
+}
+
+/** Writes a pending debounced save now (before switching libraries). */
+function flushStateSave() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (S.root) api.libSave(S.root, S.state);
 }
 
 // Flush a pending debounced save when the window closes or reloads.
@@ -108,15 +116,25 @@ function mkModel(m) {
   };
 }
 
+// Bumped by every openLibrary call; a slower, older open (e.g. the startup re-open racing a
+// folder the user picked) drops its results instead of mixing one library's state into another.
+let openGen = 0;
+
 async function openLibrary(root) {
   if (!root) return;
+  const gen = ++openGen;
+  flushStateSave();
   busy('Scanning ' + root + ' …');
   try {
-    const { state, thumbDir } = await api.libLoad(root);
+    const { state: saved, thumbDir } = await api.libLoad(root);
+    if (gen !== openGen) return;
+    const state = Object.assign(defaultLibState(), saved || {});
+    const scan = await api.scan(root, state.textureDirs);
+    if (gen !== openGen) return;
+    flushStateSave();
     S.root = root;
     S.thumbDir = thumbDir;
-    S.state = Object.assign(defaultLibState(), state || {});
-    const scan = await api.scan(root, S.state.textureDirs);
+    S.state = state;
     S.models = scan.models.map(mkModel);
     S.byPath = new Map(S.models.map((m) => [m.path, m]));
     S.index = new TextureIndex(scan.images);
@@ -137,9 +155,9 @@ async function openLibrary(root) {
     thumbs.reset();
   } catch (e) {
     console.error(e);
-    toast('Could not open folder: ' + e.message, 5000);
+    if (gen === openGen) toast('Could not open folder: ' + e.message, 5000);
   } finally {
-    busy(null);
+    if (gen === openGen) busy(null);
   }
 }
 
@@ -1341,7 +1359,8 @@ document.addEventListener('keydown', (e) => {
   $('#opt-size').value = S.settings.cardSize;
   document.documentElement.style.setProperty('--insp-w', S.settings.inspW + 'px');
   refresh();
-  if (S.recent[0] && (await api.exists(S.recent[0]))) await openLibrary(S.recent[0]);
+  // Re-open the last folder, unless one was opened while we were starting up.
+  if (S.recent[0] && (await api.exists(S.recent[0])) && !openGen) await openLibrary(S.recent[0]);
 })();
 
 // Exposed for automated tests / debugging (see docs/DEVELOPMENT.md).
