@@ -65,11 +65,27 @@ async function readJson(file, fallback) {
   try { return JSON.parse(await fsp.readFile(file, 'utf8')); } catch { return fallback; }
 }
 
-async function writeJsonAtomic(file, data) {
+// Writes to the same file run one after another; overlapping writes with a shared temp
+// name used to fail ("ENOENT … rename") or land out of order.
+const fileQueues = new Map();
+function serialized(file, task) {
+  const prev = fileQueues.get(file) || Promise.resolve();
+  const next = prev.catch(() => {}).then(task);
+  fileQueues.set(file, next);
+  next.finally(() => { if (fileQueues.get(file) === next) fileQueues.delete(file); }).catch(() => {});
+  return next;
+}
+
+let tmpCounter = 0;
+async function writeJsonNow(file, data) {
   await fsp.mkdir(path.dirname(file), { recursive: true });
-  const tmp = file + '.' + process.pid + '.tmp';
+  const tmp = `${file}.${process.pid}.${++tmpCounter}.tmp`;
   await fsp.writeFile(tmp, JSON.stringify(data));
   await fsp.rename(tmp, file);
+}
+
+function writeJsonAtomic(file, data) {
+  return serialized(file, () => writeJsonNow(file, data));
 }
 
 // ---------------------------------------------------------------------------
@@ -172,9 +188,11 @@ async function createWindow() {
   const saveBounds = async () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const bounds = { ...mainWindow.getNormalBounds(), maximized: mainWindow.isMaximized() };
-    const c = await readJson(configPath(), {});
-    c.window = bounds;
-    await writeJsonAtomic(configPath(), c).catch(() => {});
+    await serialized(configPath(), async () => {
+      const c = await readJson(configPath(), {});
+      c.window = bounds;
+      await writeJsonNow(configPath(), c);
+    }).catch(() => {});
   };
   mainWindow.on('close', saveBounds);
 
@@ -277,12 +295,13 @@ function registerIpc() {
   ipcMain.handle('clipboard', (_e, text) => { clipboard.writeText(String(text)); return true; });
   ipcMain.handle('reveal', (_e, p) => { shell.showItemInFolder(p); return true; });
   ipcMain.handle('config-get', () => readJson(configPath(), {}));
-  ipcMain.handle('config-set', async (_e, patch) => {
+  // Read-modify-write inside the queue so quick successive patches don't lose each other.
+  ipcMain.handle('config-set', (_e, patch) => serialized(configPath(), async () => {
     const c = await readJson(configPath(), {});
     Object.assign(c, patch);
-    await writeJsonAtomic(configPath(), c);
+    await writeJsonNow(configPath(), c);
     return c;
-  });
+  }));
   ipcMain.handle('exists', async (_e, p) => { try { await fsp.access(p); return true; } catch { return false; } });
   ipcMain.handle('capture', async (_e, file) => {
     const img = await mainWindow.webContents.capturePage();
