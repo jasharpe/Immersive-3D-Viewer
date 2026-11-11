@@ -211,6 +211,10 @@ export async function loadModel(filePath, opts) {
     case '.fbx': {
       object = await new FBXLoader(manager).loadAsync(url);
       animations = object.animations || [];
+      // FBX stores UnitScaleFactor as centimetres per file unit (100 = metres). FBXLoader
+      // reads it but doesn't apply it, so centimetre files came out 100x too large.
+      const usf = object.userData.unitScaleFactor;
+      if (typeof usf === 'number' && usf > 0 && usf !== 100) object.scale.multiplyScalar(usf / 100);
       break;
     }
     case '.obj': {
@@ -302,6 +306,8 @@ export async function loadModel(filePath, opts) {
 
   object.updateMatrixWorld(true);
   const stats = computeStats(object);
+  const box = boundsOf(object);
+  const size = box ? box.getSize(new THREE.Vector3()).toArray() : null; // metres
   const refList = [...refs.values()];
   const report = {
     refs: refList,
@@ -309,6 +315,7 @@ export async function loadModel(filePath, opts) {
     auto,
     materials: materials.map((m) => ({ key: m.key, name: m.material.name, type: m.material.type })),
     animations: animations.map((a) => ({ name: a.name, duration: a.duration })),
+    size,
     ...stats,
   };
 

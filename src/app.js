@@ -6,6 +6,7 @@ import { Thumbnailer } from './lib/thumbnailer.js';
 import { Zoo } from './lib/zoo.js';
 import * as P from './lib/paths.js';
 import { icon } from './icons.js';
+import { fmtDims } from './lib/format.js';
 
 const api = window.api;
 const THUMB_VERSION = 1;
@@ -805,6 +806,7 @@ function renderInspector(m, res, err) {
     `<span class="stat">${fmtSize(m.size)}</span>`,
   ];
   if (r) {
+    if (r.size) stats.push(`<span class="stat" title="Width × height × depth">${fmtDims(r.size)}</span>`);
     stats.push(`<span class="stat">${fmtNum(r.tris)} tris</span>`, `<span class="stat">${r.materials.length} material${r.materials.length === 1 ? '' : 's'}</span>`);
     if (r.animations.length) stats.push(`<span class="stat">${r.animations.length} animation${r.animations.length === 1 ? '' : 's'}</span>`);
     if (r.missing.length) stats.push(`<span class="stat warn">${r.missing.length} missing texture${r.missing.length === 1 ? '' : 's'}</span>`);
