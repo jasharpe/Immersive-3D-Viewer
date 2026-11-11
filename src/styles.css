@@ -210,6 +210,7 @@ input[type=checkbox] { accent-color: var(--accent); }
 .zoo-hover { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); background: rgba(15,17,21,.78); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 8px 12px; color: #fff; text-align: center; max-width: 70vw; pointer-events: none; }
 .zoo-hover-name { font-weight: 700; font-size: 15px; }
 .zoo-hover-path { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: #b7c0cf; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zoo-hover-name.hearted { color: #ff8fa3; }
 .zoo-hover-size { font-size: 12px; color: #dfe6f2; margin-top: 2px; }
 .zoo-hover-hint { font-size: 11px; color: #ffd34d; margin-top: 2px; }
 .zoo-toast { position: absolute; top: 14%; left: 50%; transform: translateX(-50%); background: rgba(34,139,84,.92); color: #fff; font-weight: 600; padding: 8px 16px; border-radius: 8px; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }

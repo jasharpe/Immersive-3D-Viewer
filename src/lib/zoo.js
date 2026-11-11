@@ -25,7 +25,8 @@ export class Zoo {
   /**
    * @param host     element to fill
    * @param items    [{path, name, group, rel}]
-   * @param options  { makeLoadOpts(path), pixelated, scale, onScale(scale), onCopy(item), onInspect(item), onExit() }
+   * @param options  { makeLoadOpts(path), pixelated, scale, onScale(scale), onCopy(item),
+   *                   isHearted(item), onToggleHeart(item) → bool, onInspect(item), onExit() }
    */
   constructor(host, items, options) {
     this.host = host;
@@ -62,8 +63,8 @@ export class Zoo {
       <canvas></canvas>
       <div class="zoo-crosshair"></div>
       <div class="zoo-top"><b>Zoo</b> · <span class="zoo-count"></span> · <span class="zoo-scale"></span> <span class="zoo-loading"></span></div>
-      <div class="zoo-help">WASD move · Shift run · Space jump · F fly (Space/C up/down) · +/− scale · Click copy path · E inspect · Esc menu</div>
-      <div class="zoo-hover hidden"><div class="zoo-hover-name"></div><div class="zoo-hover-path"></div><div class="zoo-hover-size"></div><div class="zoo-hover-hint">Click to copy path · E to inspect</div></div>
+      <div class="zoo-help">WASD move · Shift run · Space jump · F fly (Space/C up/down) · +/− scale · Click copy path · H / right-click heart · E inspect · Esc menu</div>
+      <div class="zoo-hover hidden"><div class="zoo-hover-name"></div><div class="zoo-hover-path"></div><div class="zoo-hover-size"></div><div class="zoo-hover-hint">Click to copy path · H to heart · E to inspect</div></div>
       <div class="zoo-toast hidden"></div>
       <div class="zoo-menu">
         <div class="zoo-menu-card">
@@ -85,6 +86,7 @@ export class Zoo {
             <tr><td>- _</td><td>Make models smaller</td></tr>
             <tr><td>0</td><td>Real size</td></tr>
             <tr><td>Click</td><td>Copy model path</td></tr>
+            <tr><td>H / Right-click</td><td>Heart / un-heart model</td></tr>
             <tr><td>E</td><td>Inspect model in viewer</td></tr>
             <tr><td>Esc</td><td>This menu</td></tr>
           </table>
@@ -279,14 +281,33 @@ export class Zoo {
     const placeholder = new THREE.Mesh(this.placeholderGeo, this.placeholderMat);
     this.scene.add(placeholder);
 
-    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTexture(item.name, { font: '600 34px system-ui, sans-serif', bg: 'rgba(20,22,28,0.78)', fg: '#fff', pad: 14 }), depthWrite: false }));
-    const lh = 0.28;
-    label.scale.set(lh * label.material.map.userData.aspect, lh, 1);
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ depthWrite: false }));
     this.scene.add(label);
 
-    const ex = { item, ped, holder, placeholder, label, size: null, hitBox: new THREE.Box3(), mixer: null, result: null, cx: 0, cz: 0, tx: 0, tz: 0, r: 0, tr: 0, g: this.scale };
+    const ex = { item, ped, holder, placeholder, label, hearted: !!this.opts.isHearted?.(item), size: null, hitBox: new THREE.Box3(), mixer: null, result: null, cx: 0, cz: 0, tx: 0, tz: 0, r: 0, tr: 0, g: this.scale };
+    this.updateLabel(ex);
     this.exhibits.push(ex);
     return ex;
+  }
+
+  /** (Re)draws an exhibit's floating name tag; hearted models get a pink ♥ tag. */
+  updateLabel(ex) {
+    const old = ex.label.material.map;
+    const text = ex.hearted ? '♥ ' + ex.item.name : ex.item.name;
+    ex.label.material.map = textTexture(text, { font: '600 34px system-ui, sans-serif', bg: ex.hearted ? 'rgba(190,30,70,0.88)' : 'rgba(20,22,28,0.78)', fg: '#fff', pad: 14 });
+    ex.label.material.needsUpdate = true;
+    old?.dispose();
+    const lh = 0.28;
+    ex.label.scale.set(lh * ex.label.material.map.userData.aspect, lh, 1);
+  }
+
+  toggleHeart(ex) {
+    const on = this.opts.onToggleHeart?.(ex.item);
+    if (typeof on !== 'boolean') return;
+    ex.hearted = on;
+    this.updateLabel(ex);
+    this.showHover(ex);
+    this.toast(on ? '♥ Hearted ' + ex.item.name : 'Removed heart from ' + ex.item.name);
   }
 
   /** Applies an exhibit's current position/scale to its objects and hit box. */
@@ -391,11 +412,14 @@ export class Zoo {
       if (e.code === 'Digit0' || e.code === 'Numpad0') this.setScale(1);
       if (e.code === 'KeyF') { this.fly = !this.fly; this.velocity.y = 0; this.toast(this.fly ? 'Fly mode on' : 'Fly mode off'); }
       if (e.code === 'Space' && !this.fly && this.onGround) { this.velocity.y = 5.5; this.onGround = false; }
+      if (e.code === 'KeyH' && this.hovered) this.toggleHeart(this.hovered);
       if (e.code === 'KeyE' && this.hovered) { const it = this.hovered.item; this.exit(); this.opts.onInspect?.(it); }
     };
     this.onKeyUp = (e) => { this.keys.delete(e.code); };
     this.onMouseDown = (e) => {
-      if (!this.controls.isLocked || e.button !== 0) return;
+      if (!this.controls.isLocked) return;
+      if (e.button === 2) { if (this.hovered) this.toggleHeart(this.hovered); return; }
+      if (e.button !== 0) return;
       if (this.hovered) {
         this.opts.onCopy?.(this.hovered.item);
         this.toast('Copied: ' + this.hovered.item.name);
@@ -405,6 +429,8 @@ export class Zoo {
     document.addEventListener('keydown', this.onKeyDown, true);
     document.addEventListener('keyup', this.onKeyUp, true);
     document.addEventListener('mousedown', this.onMouseDown, true);
+    this.onContextMenu = (e) => e.preventDefault();
+    this.el.addEventListener('contextmenu', this.onContextMenu);
   }
 
   lock() {
@@ -530,7 +556,8 @@ export class Zoo {
   }
 
   showHover(ex) {
-    this.$('.zoo-hover-name').textContent = ex.item.name;
+    this.$('.zoo-hover-name').textContent = (ex.hearted ? '♥ ' : '') + ex.item.name;
+    this.$('.zoo-hover-name').classList.toggle('hearted', ex.hearted);
     this.$('.zoo-hover-path').textContent = ex.item.rel;
     this.$('.zoo-hover-size').textContent = ex.size ? fmtDims(ex.size.toArray()) + (this.scale === 1 ? '' : ` (shown ×${fmtScale(this.scale)})`) : '';
     this.$('.zoo-hover').classList.remove('hidden');
