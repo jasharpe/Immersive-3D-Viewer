@@ -73,6 +73,9 @@ export class Viewer {
     if (this.mixer && this.playing) { this.mixer.update(dt); this.dirty = true; }
     if (this.controls.autoRotate) this.dirty = true;
     if (moved || this.dirty) {
+      // From below, the grid only gets in the way of the model. The switch happens with the
+      // grid edge-on, so it isn't noticeable.
+      if (this.grid) this.grid.visible = this.showGrid && this.camera.position.y >= this.grid.position.y;
       this.renderer.render(this.scene, this.camera);
       this.dirty = false;
     }

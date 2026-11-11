@@ -85,7 +85,8 @@ Click a card to load the model in the inspector on the right.
 - **Toolbar** (top right of the viewer):
   - **Reset camera:** frames the model and forgets its saved view.
   - **Idle rotation:** turns the default rotation on or off.
-  - Wireframe, grid and background colour.
+  - Wireframe, grid and background colour. The grid hides itself while you look at the
+    model from below.
 - **Arrow keys** move to the next or previous model in the grid. `Space` selects or
   deselects the active model.
 - **Animations:** if the model has animation clips, pick one from the dropdown to play it.
