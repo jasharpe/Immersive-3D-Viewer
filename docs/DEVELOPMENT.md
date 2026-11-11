@@ -107,7 +107,9 @@ testing. `app.S.zoo.camera` can be positioned from a script to take screenshots.
 - Drag an image onto a material slot, then onto the 3D viewer.
 - Copy a path with the card button, with `⌘C`/`Ctrl+C`, and from the Zoo (click). Paste it
   somewhere to check.
-- In the Zoo: WASD, jump, `F` fly, `E` to inspect, `Esc` → Exit.
+- `Z` in the library enters the Zoo with the mouse captured; `Z` again leaves.
+- In the Zoo: WASD, `Space`/`C` to fly up/down, `F` to walk and jump, `+`/`-` on one model,
+  `E` to inspect, `Esc` → Exit.
 - On Windows: paths with drive letters, UNC paths (`\\server\share`) and folder names with
   spaces or `#`.
 

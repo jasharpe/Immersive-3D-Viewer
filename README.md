@@ -130,7 +130,7 @@ The basics:
 | Inspect a model | Click its card. Drag to orbit, scroll to zoom, right-drag to pan |
 | Select several models | `⌘`/`Ctrl`+click, `Shift`+click, or `⌘A` / `Ctrl+A` |
 | Fix textures | See *Textures* below |
-| Walk around | **Enter Zoo**: WASD + mouse, click a model to copy its path, `E` to inspect it, `Esc` for the menu |
+| Walk around | **Enter Zoo** or `Z`: WASD + mouse, click a model to copy its path, `E` to inspect it, `+`/`-` to resize it, `Z` to leave |
 
 **Textures.** Models with unresolved textures get a yellow **N missing** badge and show a
 magenta checkerboard where the texture should be. You can fix them in several ways:

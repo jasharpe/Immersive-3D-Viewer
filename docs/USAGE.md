@@ -161,33 +161,39 @@ textures. Right-click → **Regenerate thumbnail** forces it.
 
 ## The Zoo
 
-Click **Enter Zoo** to walk among the models currently shown in the grid, or select models
-and use **Zoo with selection**. You start in front of the model you had selected in the
-library, facing it. The Zoo holds up to 400 models. For bigger views it takes the 400
+Click **Enter Zoo** or press `Z` to walk among the models currently shown in the grid, or
+select models and use **Zoo with selection**. With `Z` you're straight in, mouse captured,
+without the start menu; press `Z` again to leave. You start in fly mode, in front of the
+model you had selected in the library and facing it. The Zoo holds up to 400 models. For bigger views it takes the 400
 around your selected model, or you can narrow the view first with search, folders or a
 selection.
 
 Models stand on pedestals in rows, one row (or more) per folder, with a blue sign naming the
 folder. Models are shown at their **real size**, using the units stored in the file. Spacing and
-pedestals adapt to each model's footprint, and neighbours slide apart as models finish
-loading. Some asset packs are modelled far larger or smaller than life. Press `=` / `+` and
-`-` / `_` to scale every model up or down together, and `0` to return to real size. The
-scale is remembered for next time. Click **Click to walk around** to start.
+pedestals adapt to each model's footprint. Model sizes are remembered once a model has had
+a thumbnail made or been in the Zoo, so rows are laid out at their final spacing straight
+away. Models without a known size make room for themselves as they load, while the model
+you started at stays put.
+
+Some asset packs are modelled far larger or smaller than life. Look at a model and press
+`=` / `+` or `-` / `_` to make it bigger or smaller, or `0` to return it to real size. The
+model stays where it is and its neighbours make room. Each model's scale is remembered with
+the library. Click **Click to walk around** to start.
 
 | Key | Action |
 |---|---|
 | `W` `A` `S` `D` / arrow keys | Move |
 | Mouse | Look |
 | `Shift` | Run |
-| `Space` | Jump (in fly mode: go up) |
-| `F` | Toggle fly / noclip. WASD still moves horizontally; use `Space` / `C` to change height |
-| `C` | Fly down |
-| `=` / `+` | Make all models bigger (hold to repeat) |
-| `-` / `_` | Make all models smaller |
-| `0` | Back to real size |
+| `Space` / `C` | Fly up / down (walking: `Space` jumps) |
+| `F` | Switch between flying (the default; no gravity or collisions, WASD stays horizontal) and walking |
+| `=` / `+` | Make the model under the crosshair bigger (hold to repeat) |
+| `-` / `_` | Make it smaller |
+| `0` | Return it to real size |
 | Left click | Copy the path of the model under the crosshair |
 | `H` / right click | Heart or un-heart the model under the crosshair |
 | `E` | Leave the Zoo and open the model under the crosshair in the inspector |
+| `Z` | Leave the Zoo |
 | `Esc` | Release the mouse and show the menu (Resume, Exit, labels, animation) |
 
 The model you're looking at gets a gold pedestal and its name and path appear below the

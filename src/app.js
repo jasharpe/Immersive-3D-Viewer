@@ -42,7 +42,7 @@ const S = {
 };
 
 function defaultLibState() {
-  return { version: 1, overrides: {}, remap: {}, meta: {}, textureDirs: [], hearts: {}, views: {} };
+  return { version: 1, overrides: {}, remap: {}, meta: {}, textureDirs: [], hearts: {}, views: {}, zooScales: {} };
 }
 
 const lib = () => ({ root: S.root, state: S.state });
@@ -229,6 +229,7 @@ const thumbs = {
         refs: report.refs.map((r) => r.name.toLowerCase()),
         missing: report.missing,
         tris: report.tris,
+        size: report.size, // metres; lets the zoo lay out rows before models load
         mats: report.materials.length,
         anims: report.animations.length,
         empty: !!report.empty,
@@ -1226,7 +1227,7 @@ $('#btn-missing').onclick = missingTexturesModal;
 $('#btn-texdirs').onclick = textureDirsModal;
 
 // ---------------------------------------------------------------------------- zoo
-function enterZoo(entries = S.entries) {
+function enterZoo(entries = S.entries, { autoLock = false } = {}) {
   if (!S.root || !entries.length) { toast('Nothing to show — open a folder or clear filters'); return; }
   // Start in front of the model selected in the library (if it's part of this zoo).
   const activeIdx = S.active ? entries.findIndex((e) => e.variants.some((v) => v.path === S.active)) : -1;
@@ -1237,7 +1238,8 @@ function enterZoo(entries = S.entries) {
     toast(`Showing ${ZOO_MAX} of ${list.length} models${activeIdx < 0 ? '' : ' around the selected one'} — narrow the view with search, folders or a selection`, 5000);
     list = list.slice(start, start + ZOO_MAX);
   }
-  const items = list.map((e) => ({ path: e.model.path, name: e.model.name, rel: e.model.rel, group: e.model.relDir }));
+  const items = list.map((e) => ({ path: e.model.path, name: e.model.name, rel: e.model.rel, group: e.model.relDir,
+    size: S.state.meta[e.model.path]?.size, scale: S.state.zooScales[e.model.path] }));
   const startAt = activeIdx >= 0 ? entries[activeIdx].model.path : null;
   const host = $('#zoo-host');
   host.classList.remove('hidden');
@@ -1245,10 +1247,20 @@ function enterZoo(entries = S.entries) {
   S.zoo = new Zoo(host, items, {
     makeLoadOpts: loadOptsFor,
     startAt,
+    autoLock,
     pixelated: S.settings.pixelated,
-    scale: S.settings.zooScale || 1,
-    onScale: (scale) => { S.settings.zooScale = scale; saveSettings(); },
+    // Per-model display scale in the zoo, kept with the library (many packs aren't authored at real size).
+    onScale: (it, scale) => {
+      if (scale === 1) delete S.state.zooScales[it.path];
+      else S.state.zooScales[it.path] = scale;
+      saveStateSoon();
+    },
     onCopy: (it) => api.copy(it.path),
+    // Remember sizes for models thumbnailed before sizes were recorded, so the next visit is steady.
+    onSize: (it, size) => {
+      const meta = S.state.meta[it.path];
+      if (meta && !meta.error && !meta.size) { meta.size = size; saveStateSoon(); }
+    },
     isHearted: (it) => isHeartedAny(it.path),
     onToggleHeart: (it) => toggleHeart(it.path, { quiet: true }),
     onInspect: (it) => {
@@ -1325,6 +1337,11 @@ document.addEventListener('keydown', (e) => {
   if (inInput) return;
   if (mod && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAll(); return; }
   if (!mod && !e.altKey && e.key.toLowerCase() === 'h' && S.active) { e.preventDefault(); toggleHeart(S.active); return; }
+  if (!mod && !e.altKey && e.code === 'KeyZ') {
+    e.preventDefault();
+    if (!e.repeat && !document.querySelector('.modal-back')) enterZoo(S.entries, { autoLock: true });
+    return;
+  }
   if (mod && e.key.toLowerCase() === 'c' && !window.getSelection()?.toString()) {
     e.preventDefault();
     if (S.selection.size > 1) { const t = selectedEntries().map((x) => x.model.path).join('\n'); api.copy(t); toast(`Copied ${S.selection.size} paths`); }

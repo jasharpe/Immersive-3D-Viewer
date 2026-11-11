@@ -143,9 +143,15 @@ most three at once, well within Chromium's limit.
 - **Zoo.** Created when you enter and fully disposed when you leave (`forceContextLoss`).
   - Layout: entries are grouped by `relDir`, `PER_ROW` per row, with rows spaced along Z.
     Models are shown at real size, turned 180° to face the spawn side.
-  - Each pedestal is a unit cylinder scaled to the model's footprint. `relayout()`
-    recomputes target positions whenever a model loads (its footprint becomes known) or
-    the global scale changes (`+`/`-`/`0`). Exhibits glide to their targets in `tick()`.
+  - Each pedestal is a unit cylinder scaled to the model's footprint at that exhibit's
+    display scale (`+`/`-`/`0` change the scale of the exhibit under the crosshair, saved in
+    `zooScales`). `relayout()` recomputes target positions whenever a model loads or is
+    resized, and exhibits glide to their targets in `tick()`.
+  - Footprints come from `meta[path].size`, recorded by the thumbnailer and by the Zoo
+    itself (`onSize`), so the layout is usually final before anything loads.
+  - The layout is anchored: after each `relayout()` everything is shifted so the anchor
+    exhibit (the start model, then the last one resized) keeps its position. The camera
+    eases into place in front of the start model until the player moves or looks.
   - Models load three at a time, nearest first, with wireframe placeholders until then. They
     share one texture cache.
   - The player uses `PointerLockControls` for looking. Movement, gravity, jumping, fly mode
@@ -159,7 +165,7 @@ most three at once, well within Chromium's limit.
 | What | Where | Format |
 |---|---|---|
 | App config (window bounds, recent folders, UI settings) | `userData/config.json` | JSON |
-| Library state | `userData/libraries/<sha1(root)[0:16]>/state.json` | `{ version, overrides, remap, meta, textureDirs, hearts, views }`. `hearts` maps model path → time hearted, and `views` maps model path → saved camera `{ position, target }` |
+| Library state | `userData/libraries/<sha1(root)[0:16]>/state.json` | `{ version, overrides, remap, meta, textureDirs, hearts, views, zooScales }`. `hearts` maps model path → time hearted, `views` maps model path → saved camera `{ position, target }`, and `zooScales` maps model path → Zoo display scale (absent = real size). `meta[path].size` is the model's `[x, y, z]` size in metres |
 | Thumbnails | `userData/libraries/<…>/thumbs/<sha1(modelPath)[0:24]>.png` | 256×256 PNG |
 
 Writes are atomic (write to a temp file, then rename). Library state is saved with a short

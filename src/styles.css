@@ -215,7 +215,7 @@ input[type=checkbox] { accent-color: var(--accent); }
 .zoo-hover-hint { font-size: 11px; color: #ffd34d; margin-top: 2px; }
 .zoo-toast { position: absolute; top: 14%; left: 50%; transform: translateX(-50%); background: rgba(34,139,84,.92); color: #fff; font-weight: 600; padding: 8px 16px; border-radius: 8px; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
 .zoo-menu { position: absolute; inset: 0; background: rgba(8,10,14,.55); display: flex; align-items: center; justify-content: center; }
-.zoo.locked .zoo-menu { display: none; }
+.zoo.locked .zoo-menu, .zoo.entering .zoo-menu { display: none; }
 .zoo-menu-card { background: rgba(27,30,36,.96); border: 1px solid var(--line); border-radius: 14px; padding: 24px 28px; width: 380px; text-align: center; }
 .zoo-menu-card h2 { font-size: 20px; }
 .zoo-menu-sub { color: var(--muted); }

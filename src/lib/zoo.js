@@ -24,9 +24,11 @@ const SCALE_MAX = 64;
 export class Zoo {
   /**
    * @param host     element to fill
-   * @param items    [{path, name, group, rel}]
-   * @param options  { makeLoadOpts(path), startAt (path to spawn in front of), pixelated, scale, onScale(scale), onCopy(item),
-   *                   isHearted(item), onToggleHeart(item) → bool, onInspect(item), onExit() }
+   * @param items    [{path, name, group, rel, size?, scale?}]  size: [x, y, z] metres if already known (lays the
+   *                   rows out at their final spacing before anything loads); scale: display scale (1 = real size)
+   * @param options  { makeLoadOpts(path), startAt (path to spawn in front of), autoLock (skip the start menu; call from a
+   *                   key/click handler so pointer lock is allowed), pixelated, onScale(item, scale), onCopy(item),
+   *                   isHearted(item), onToggleHeart(item) → bool, onInspect(item), onSize(item, [x, y, z]), onExit() }
    */
   constructor(host, items, options) {
     this.host = host;
@@ -37,14 +39,13 @@ export class Zoo {
     this.rows = [];
     this.keys = new Set();
     this.velocity = new THREE.Vector3();
-    this.fly = false;
+    this.fly = true; // walking (gravity, jump) is one F away
     this.onGround = true;
     this.showLabels = true;
     this.animate = true;
     this.hovered = null;
     this.loaded = 0;
     this.disposed = false;
-    this.scale = clampScale(options.scale ?? 1);
     this.lastTime = performance.now();
 
     this.buildDom();
@@ -53,6 +54,11 @@ export class Zoo {
     this.bindEvents();
     this.renderer.setAnimationLoop(() => this.tick());
     this.loadAll();
+    if (options.autoLock) {
+      // Hide the menu while pointer lock is pending; it comes back if the lock is refused.
+      this.el.classList.add('entering');
+      this.lock();
+    }
   }
 
   // ---------------------------------------------------------------- DOM / HUD
@@ -62,8 +68,8 @@ export class Zoo {
     el.innerHTML = `
       <canvas></canvas>
       <div class="zoo-crosshair"></div>
-      <div class="zoo-top"><b>Zoo</b> · <span class="zoo-count"></span> · <span class="zoo-scale"></span> <span class="zoo-loading"></span></div>
-      <div class="zoo-help">WASD move · Shift run · Space jump · F fly (Space/C up/down) · +/− scale · Click copy path · H / right-click heart · E inspect · Esc menu</div>
+      <div class="zoo-top"><b>Zoo</b> · <span class="zoo-count"></span> <span class="zoo-loading"></span></div>
+      <div class="zoo-help">WASD move · Shift run · Space/C up/down · F walk/fly · +/− resize model · Click copy path · H / right-click heart · E inspect · Z exit · Esc menu</div>
       <div class="zoo-hover hidden"><div class="zoo-hover-name"></div><div class="zoo-hover-path"></div><div class="zoo-hover-size"></div><div class="zoo-hover-hint">Click to copy path · H to heart · E to inspect</div></div>
       <div class="zoo-toast hidden"></div>
       <div class="zoo-menu">
@@ -79,18 +85,18 @@ export class Zoo {
             <tr><td>W A S D</td><td>Move</td></tr>
             <tr><td>Mouse</td><td>Look</td></tr>
             <tr><td>Shift</td><td>Run</td></tr>
-            <tr><td>Space</td><td>Jump (fly: up)</td></tr>
-            <tr><td>F</td><td>Toggle fly / noclip</td></tr>
-            <tr><td>C</td><td>Fly down</td></tr>
-            <tr><td>= +</td><td>Make models bigger</td></tr>
-            <tr><td>- _</td><td>Make models smaller</td></tr>
-            <tr><td>0</td><td>Real size</td></tr>
+            <tr><td>Space / C</td><td>Fly up / down (walking: Space jumps)</td></tr>
+            <tr><td>F</td><td>Switch between flying and walking</td></tr>
+            <tr><td>= +</td><td>Make the model you're looking at bigger</td></tr>
+            <tr><td>- _</td><td>Make it smaller</td></tr>
+            <tr><td>0</td><td>Back to real size</td></tr>
             <tr><td>Click</td><td>Copy model path</td></tr>
             <tr><td>H / Right-click</td><td>Heart / un-heart model</td></tr>
             <tr><td>E</td><td>Inspect model in viewer</td></tr>
+            <tr><td>Z</td><td>Exit zoo</td></tr>
             <tr><td>Esc</td><td>This menu</td></tr>
           </table>
-          <button class="btn zoo-exit">Exit zoo</button>
+          <button class="btn zoo-exit">Exit zoo (Z)</button>
         </div>
       </div>`;
     this.host.appendChild(el);
@@ -103,7 +109,6 @@ export class Zoo {
     this.$('.zoo-exit').onclick = () => this.exit();
     this.$('.zoo-labels').onchange = (e) => { this.showLabels = e.target.checked; };
     this.$('.zoo-anim').onchange = (e) => { this.animate = e.target.checked; };
-    this.updateScaleHud();
   }
 
   toast(msg) {
@@ -112,10 +117,6 @@ export class Zoo {
     t.classList.remove('hidden');
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => t.classList.add('hidden'), 1800);
-  }
-
-  updateScaleHud() {
-    this.$('.zoo-scale').textContent = this.scale === 1 ? 'real size' : `scale ×${fmtScale(this.scale)}`;
   }
 
   // ---------------------------------------------------------------- scene
@@ -133,7 +134,7 @@ export class Zoo {
 
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.02, 1000);
     this.controls = new PointerLockControls(this.camera, this.canvas);
-    this.controls.addEventListener('lock', () => this.el.classList.add('locked'));
+    this.controls.addEventListener('lock', () => { this.el.classList.add('locked'); this.el.classList.remove('entering'); });
     this.controls.addEventListener('change', () => { this.following = false; }); // mouse look
     this.controls.addEventListener('unlock', () => { this.el.classList.remove('locked'); this.keys.clear(); });
 
@@ -211,32 +212,46 @@ export class Zoo {
         this.rows.push(row);
       }
     }
+    // Spawn facing the model that was selected in the library. The layout is anchored on it
+    // (see relayout), so it never moves; only the camera distance may settle once its real
+    // size is known, until the visitor first moves or looks around.
+    this.startEx = this.exhibits.find((ex) => ex.item.path === this.opts.startAt) || null;
     this.relayout(true);
     this.camera.position.set(3, EYE, -AISLE * 0.8);
     this.camera.lookAt(5, EYE * 0.6, 2);
-    // Spawn facing the model that was selected in the library. Rows re-flow while models
-    // load, so keep following it until the visitor first moves or looks around.
-    this.startEx = this.exhibits.find((ex) => ex.item.path === this.opts.startAt) || null;
     this.following = !!this.startEx;
-    if (this.following) this.faceStart();
+    if (this.following) this.faceStart(1);
   }
 
-  /** Puts the camera on the visitor's side of the start exhibit, far enough back to see it whole. */
-  faceStart() {
+  /**
+   * Moves the camera toward the visitor's side of the start exhibit, far enough back to see it
+   * whole. `k` is the fraction of the way to go (1 = jump there).
+   */
+  faceStart(k) {
     const ex = this.startEx;
-    const g = this.scale;
-    const h = ex.size ? ex.size.y * g : PLACEHOLDER;
-    const w = ex.size ? Math.max(ex.size.x, ex.size.z) * g : PLACEHOLDER;
+    const g = ex.s;
+    const s = ex.size || ex.hint;
+    const h = s ? s.y * g : PLACEHOLDER;
+    const w = s ? Math.max(s.x, s.z) * g : PLACEHOLDER;
     const halfFov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
-    const dist = Math.max(ex.r + 1.2, (Math.max(h, w) * 0.65) / Math.tan(halfFov));
-    this.camera.position.set(ex.cx, EYE, ex.cz - dist);
-    this.camera.lookAt(ex.cx, PED_H + HOVER + h * 0.5, ex.cz);
+    const midY = PED_H + HOVER + h * 0.5;
+    const fit = (Math.max(h, w) * 0.65) / Math.tan(halfFov);
+    // Standing eye height, clear of the pedestal (also when starting in fly mode).
+    const back = Math.max(ex.tr + 1.2, fit);
+    const cam = this.camera.position;
+    this.lookY ??= midY;
+    cam.x += (ex.tx - cam.x) * k;
+    cam.y += (EYE - cam.y) * k;
+    cam.z += (ex.tz - back - cam.z) * k;
+    this.lookY += (midY - this.lookY) * k;
+    this.camera.lookAt(ex.tx, this.lookY, ex.tz);
   }
 
-  /** Pedestal radius that fits the model's footprint at the current scale. */
+  /** Pedestal radius that fits the model's footprint at its display scale. */
   pedRadius(ex) {
-    if (!ex.size) return MIN_PED_R + 0.1;
-    const half = Math.hypot(ex.size.x, ex.size.z) * 0.5 * this.scale;
+    const s = ex.size || ex.hint;
+    if (!s) return MIN_PED_R + 0.1;
+    const half = Math.hypot(s.x, s.z) * 0.5 * ex.s;
     return Math.max(MIN_PED_R, half * 1.05 + 0.08);
   }
 
@@ -257,10 +272,25 @@ export class Zoo {
       maxX = Math.max(maxX, x);
       z += depth + AISLE;
     }
-    this.bounds = { minX: -10, maxX: maxX + 10, minZ: -AISLE * 3, maxZ: z + 5 };
+    // Keep the anchor exhibit (the start one, then whichever was last resized) where it stands
+    // and shift everything else around it, so models arriving or being resized don't slide the
+    // world past the visitor.
+    let dx = 0;
+    let dz = 0;
+    this.anchorEx ??= this.startEx;
+    const a = this.anchorEx;
+    if (a) {
+      this.anchor ??= { x: a.tx, z: a.tz };
+      dx = this.anchor.x - a.tx;
+      dz = this.anchor.z - a.tz;
+      for (const ex of this.exhibits) { ex.tx += dx; ex.tz += dz; }
+      for (const row of this.rows) row.z += dz;
+    }
+    for (const row of this.rows) row.x = -1.5 + dx;
+    this.bounds = { minX: -10 + dx, maxX: maxX + 10 + dx, minZ: -AISLE * 3 + dz, maxZ: z + 5 + dz };
     if (snap) {
-      for (const ex of this.exhibits) { ex.cx = ex.tx; ex.cz = ex.tz; ex.r = ex.tr; ex.g = this.scale; this.place(ex); }
-      for (const row of this.rows) { row.cz = row.z; this.placeSign(row); }
+      for (const ex of this.exhibits) { ex.cx = ex.tx; ex.cz = ex.tz; ex.r = ex.tr; ex.g = ex.s; this.place(ex); }
+      for (const row of this.rows) { row.cx = row.x; row.cz = row.z; this.placeSign(row); }
     }
   }
 
@@ -285,7 +315,7 @@ export class Zoo {
   }
 
   placeSign(row) {
-    if (row.sign) row.sign.position.set(-1.5, 0, row.cz);
+    if (row.sign) row.sign.position.set(row.cx, 0, row.cz);
   }
 
   makeExhibit(item) {
@@ -302,7 +332,8 @@ export class Zoo {
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ depthWrite: false }));
     this.scene.add(label);
 
-    const ex = { item, ped, holder, placeholder, label, hearted: !!this.opts.isHearted?.(item), size: null, hitBox: new THREE.Box3(), mixer: null, result: null, cx: 0, cz: 0, tx: 0, tz: 0, r: 0, tr: 0, g: this.scale };
+    const ex = { item, ped, holder, placeholder, label, hearted: !!this.opts.isHearted?.(item), size: null, hint: item.size ? new THREE.Vector3().fromArray(item.size) : null, hitBox: new THREE.Box3(), mixer: null, result: null, cx: 0, cz: 0, tx: 0, tz: 0, r: 0, tr: 0, s: 1, g: 1 };
+    ex.s = ex.g = clampScale(item.scale || 1);
     this.updateLabel(ex);
     this.exhibits.push(ex);
     return ex;
@@ -345,14 +376,17 @@ export class Zoo {
     ex.hitBox.max.set(cx + hx, Math.max(top, PED_H + 0.3), cz + hz);
   }
 
-  setScale(s) {
+  /** Resizes one exhibit; it stays put and its neighbours make room. */
+  setScale(ex, s) {
+    if (!ex) { this.toast('Look at a model to resize it'); return; }
     const next = clampScale(s);
-    if (next === this.scale) return;
-    this.scale = next;
+    if (next === ex.s) return;
+    ex.s = next;
+    this.anchorEx = ex;
+    this.anchor = { x: ex.tx, z: ex.tz };
     this.relayout(false);
-    this.updateScaleHud();
-    this.toast(next === 1 ? 'Real size' : `Scale ×${fmtScale(next)}  (0 = real size)`);
-    this.opts.onScale?.(next);
+    this.toast(`${ex.item.name}: ${next === 1 ? 'real size' : `×${fmtScale(next)}  (0 = real size)`}`);
+    this.opts.onScale?.(ex.item, next);
   }
 
   // ---------------------------------------------------------------- loading
@@ -404,6 +438,7 @@ export class Zoo {
     ex.holder.add(inner);
     ex.result = res;
     ex.size = box.getSize(new THREE.Vector3());
+    this.opts.onSize?.(ex.item, ex.size.toArray());
     if (res.animations.length) {
       ex.mixer = new THREE.AnimationMixer(obj);
       ex.mixer.clipAction(res.animations[0]).play();
@@ -416,6 +451,14 @@ export class Zoo {
   // ---------------------------------------------------------------- input
   bindEvents() {
     this.onKeyDown = (e) => {
+      // Z leaves straight away, from the menu or while walking. Stop it reaching the library's
+      // own Z handler, which would re-enter.
+      if (e.code === 'KeyZ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.repeat) this.exit();
+        return;
+      }
       if (!this.controls.isLocked) {
         if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); }
         return;
@@ -424,10 +467,11 @@ export class Zoo {
       e.stopPropagation();
       this.keys.add(e.code);
       // Scale keys repeat while held.
-      if (e.code === 'Equal' || e.code === 'NumpadAdd') this.setScale(this.scale * SCALE_STEP);
-      if (e.code === 'Minus' || e.code === 'NumpadSubtract') this.setScale(this.scale / SCALE_STEP);
+      const ex = this.hovered;
+      if (e.code === 'Equal' || e.code === 'NumpadAdd') this.setScale(ex, ex && ex.s * SCALE_STEP);
+      if (e.code === 'Minus' || e.code === 'NumpadSubtract') this.setScale(ex, ex && ex.s / SCALE_STEP);
       if (e.repeat) return;
-      if (e.code === 'Digit0' || e.code === 'Numpad0') this.setScale(1);
+      if (e.code === 'Digit0' || e.code === 'Numpad0') this.setScale(ex, 1);
       if (e.code === 'KeyF') { this.fly = !this.fly; this.velocity.y = 0; this.toast(this.fly ? 'Fly mode on' : 'Fly mode off'); }
       if (e.code === 'Space' && !this.fly && this.onGround) { this.velocity.y = 5.5; this.onGround = false; }
       if (e.code === 'KeyH' && this.hovered) this.toggleHeart(this.hovered);
@@ -454,8 +498,10 @@ export class Zoo {
   lock() {
     try {
       const p = this.canvas.requestPointerLock();
-      if (p && p.catch) p.catch(() => { /* re-lock too soon after Esc; user can click again */ });
-    } catch { /* ignore */ }
+      // Refused (e.g. re-lock too soon after Esc, or no user gesture): show the menu so the
+      // user can click to start.
+      if (p && p.catch) p.catch(() => this.el.classList.remove('entering'));
+    } catch { this.el.classList.remove('entering'); }
   }
 
   // ---------------------------------------------------------------- frame
@@ -468,21 +514,22 @@ export class Zoo {
     // Glide exhibits and signs toward their layout targets.
     const k = 1 - Math.exp(-dt * 10);
     for (const ex of this.exhibits) {
-      if (Math.abs(ex.tx - ex.cx) + Math.abs(ex.tz - ex.cz) + Math.abs(ex.tr - ex.r) + Math.abs(this.scale - ex.g) < 1e-4) continue;
+      if (Math.abs(ex.tx - ex.cx) + Math.abs(ex.tz - ex.cz) + Math.abs(ex.tr - ex.r) + Math.abs(ex.s - ex.g) < 1e-4) continue;
       ex.cx += (ex.tx - ex.cx) * k;
       ex.cz += (ex.tz - ex.cz) * k;
       ex.r += (ex.tr - ex.r) * k;
-      ex.g += (this.scale - ex.g) * k;
-      if (Math.abs(this.scale - ex.g) < 1e-4 * this.scale) ex.g = this.scale;
+      ex.g += (ex.s - ex.g) * k;
+      if (Math.abs(ex.s - ex.g) < 1e-4 * ex.s) ex.g = ex.s;
       this.place(ex);
     }
     for (const row of this.rows) {
-      if (Math.abs(row.z - row.cz) < 1e-4) continue;
+      if (Math.abs(row.z - row.cz) + Math.abs(row.x - row.cx) < 1e-4) continue;
+      row.cx += (row.x - row.cx) * k;
       row.cz += (row.z - row.cz) * k;
       this.placeSign(row);
     }
 
-    if (this.following) this.faceStart();
+    if (this.following) this.faceStart(k);
     this.updateHover();
 
     const cam = this.camera.position;
@@ -579,7 +626,7 @@ export class Zoo {
     this.$('.zoo-hover-name').textContent = (ex.hearted ? '♥ ' : '') + ex.item.name;
     this.$('.zoo-hover-name').classList.toggle('hearted', ex.hearted);
     this.$('.zoo-hover-path').textContent = ex.item.rel;
-    this.$('.zoo-hover-size').textContent = ex.size ? fmtDims(ex.size.toArray()) + (this.scale === 1 ? '' : ` (shown ×${fmtScale(this.scale)})`) : '';
+    this.$('.zoo-hover-size').textContent = ex.size ? fmtDims(ex.size.toArray()) + (ex.s === 1 ? '' : ` (shown ×${fmtScale(ex.s)})`) : '';
     this.$('.zoo-hover').classList.remove('hidden');
   }
 
