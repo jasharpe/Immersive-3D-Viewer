@@ -148,7 +148,7 @@ most three at once, well within Chromium's limit.
 | What | Where | Format |
 |---|---|---|
 | App config (window bounds, recent folders, UI settings) | `userData/config.json` | JSON |
-| Library state | `userData/libraries/<sha1(root)[0:16]>/state.json` | `{ version, overrides, remap, meta, textureDirs }` |
+| Library state | `userData/libraries/<sha1(root)[0:16]>/state.json` | `{ version, overrides, remap, meta, textureDirs, hearts }` (`hearts` maps model path → time hearted) |
 | Thumbnails | `userData/libraries/<…>/thumbs/<sha1(modelPath)[0:24]>.png` | 256×256 PNG |
 
 Writes are atomic (write to a temp file, then rename). Library state is saved with a short

@@ -24,6 +24,7 @@ startup. The ⟳ button rescans the folder after you add or change files.
   `chair glb` finds GLB files with "chair" in the path.
 - **Formats:** click a format chip to show only that format. Click several to combine them.
 - **Status:**
+  - *♥ Hearted*: your favourite models (see *Hearts* below).
   - *Missing textures*: models that reference textures that couldn't be found.
   - *Texture overrides*: models where you've assigned textures yourself.
   - *Has animations*: models that contain animation clips.
@@ -56,6 +57,22 @@ The app copies absolute paths in your OS's native format (`/Users/…` or `C:\�
 - Right-click a card → **Copy path**.
 - In the Zoo, look at a model and click.
 
+## Hearts
+
+Heart the models you like so you can find them again quickly:
+
+- Click the ♥ button on a card (it appears on hover and stays red once hearted).
+- Click **Heart** in the inspector, or press `H` to heart or un-heart the active model.
+- Right-click a card → **Heart**. With several cards selected, use **♥ Heart** in the
+  selection bar or the context menu. If they're all hearted already, this removes their
+  hearts instead.
+- In the Zoo, look at a model and press `H` or right-click.
+
+Click **♥ Hearted** under *Status* to see only hearted models. It combines with search,
+format and folder filters, and **Enter Zoo** from this view walks among just your
+favourites. Hearts are saved per library. With *Group formats* on, a model counts as
+hearted if any of its formats is, and removing the heart clears it from every format.
+
 ## Inspecting a model
 
 Click a card to load the model in the inspector on the right.
@@ -81,7 +98,7 @@ where each one was found, and every material with its texture slots.
 | `Esc` | Clear the selection |
 
 When models are selected, a blue bar appears above the grid with these bulk actions:
-**Copy paths**, **Set texture folder…**, **Apply image to all materials…**,
+**Copy paths**, **♥ Heart**, **Set texture folder…**, **Apply image to all materials…**,
 **Reset textures** and **Zoo with selection**. Right-clicking a selected card offers the same
 actions.
 
@@ -156,6 +173,7 @@ scale is remembered for next time. Click **Click to walk around** to start.
 | `-` / `_` | Make all models smaller |
 | `0` | Back to real size |
 | Left click | Copy the path of the model under the crosshair |
+| `H` / right click | Heart or un-heart the model under the crosshair |
 | `E` | Leave the Zoo and open the model under the crosshair in the inspector |
 | `Esc` | Release the mouse and show the menu (Resume, Exit, labels, animation) |
 
@@ -170,6 +188,7 @@ if it costs too much performance.
 | `⌘F` / `Ctrl+F` | Focus search |
 | `⌘C` / `Ctrl+C` | Copy the active (or selected) model paths |
 | `⌘A` / `Ctrl+A` | Select all shown models |
+| `H` | Heart / un-heart the active model |
 | `Esc` | Close dialog / leave search / clear selection |
 | Arrow keys | Move between models |
 | `Space` | Toggle selection of the active model |
