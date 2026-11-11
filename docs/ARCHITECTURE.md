@@ -129,6 +129,12 @@ most three at once, well within Chromium's limit.
   plus hemisphere and directional lights for Phong/Lambert ones), and a grid sized to the
   model. It renders only when something changes: the camera moves, an animation plays, or
   auto-rotate is on.
+  - **Model cache:** loaded models are kept in an LRU cache of `CACHE_MAX` (10). After a
+    model is shown, `preloadNeighbours()` in `app.js` loads the entries the arrow keys
+    can reach (right, left, down, up), one at a time. Shaders and textures are uploaded
+    up front (`warm()`), so stepping to a neighbour or back is instant. The cache is
+    dropped whenever textures change (`invalidateCache()`) or another library is opened.
+    "Loading…" only appears if a model takes more than 150 ms.
 - **Zoo.** Created when you enter and fully disposed when you leave (`forceContextLoss`).
   - Layout: entries are grouped by `relDir`, `PER_ROW` per row, with rows spaced along Z.
     Models are shown at real size, turned 180° to face the spawn side.
