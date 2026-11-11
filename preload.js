@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   platform: process.platform,
-  pickFolder: (title) => ipcRenderer.invoke('pick-folder', title),
+  pickFolder: (title, startDir) => ipcRenderer.invoke('pick-folder', title, startDir),
   pickImage: (opts) => ipcRenderer.invoke('pick-image', opts),
   scan: (root, extraDirs) => ipcRenderer.invoke('scan', root, extraDirs),
   libLoad: (root) => ipcRenderer.invoke('lib-load', root),

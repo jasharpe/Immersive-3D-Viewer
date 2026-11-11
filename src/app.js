@@ -665,7 +665,7 @@ function afterHeartChange() {
 
 // ---------------------------------------------------------------------------- texture operations
 async function opSetTextureFolder(paths) {
-  const dir = await api.pickFolder(`Texture folder for ${paths.length} model file(s)`);
+  const dir = await api.pickFolder(`Texture folder for ${paths.length} model file(s)`, P.dirname(paths[0]));
   if (!dir) return;
   // Make sure images in the folder are indexed even if it's outside the library.
   if (!S.state.textureDirs.includes(dir) && !P.key(dir).startsWith(P.key(S.root) + '/')) {
@@ -682,7 +682,7 @@ async function opSetTextureFolder(paths) {
 
 async function opApplyImage(paths, imgPath) {
   if (!imgPath) {
-    const r = await api.pickImage({ title: `Image for all materials of ${paths.length} model file(s)` });
+    const r = await api.pickImage({ title: `Image for all materials of ${paths.length} model file(s)`, startDir: P.dirname(paths[0]) });
     if (!r) return;
     imgPath = r[0];
   }
@@ -701,7 +701,7 @@ function opReset(paths) {
 
 async function opSetSlot(path, matKey, slot, imgPath) {
   if (!imgPath) {
-    const r = await api.pickImage({ title: `Texture for ${matKey} · ${slot}` });
+    const r = await api.pickImage({ title: `Texture for ${matKey} · ${slot}`, startDir: P.dirname(path) });
     if (!r) return;
     imgPath = r[0];
   }
@@ -724,10 +724,14 @@ function opClearSlot(path, matKey, slot) {
   afterOverrideChange([path], 'Override removed');
 }
 
-/** Library-wide: every reference to `name` (by file name) resolves to `imgPath`. */
-async function opRemap(name, imgPath) {
+/**
+ * Library-wide: every reference to `name` (by file name) resolves to `imgPath`.
+ * `fromModel` is the model the user was looking at; the file dialog starts in its folder.
+ */
+async function opRemap(name, imgPath, fromModel = S.active) {
   if (!imgPath) {
-    const r = await api.pickImage({ title: `Replacement for “${name}” (all models)` });
+    const startDir = fromModel ? P.dirname(fromModel) : undefined;
+    const r = await api.pickImage({ title: `Replacement for “${name}” (all models)`, startDir });
     if (!r) return;
     imgPath = r[0];
   }
@@ -1158,7 +1162,9 @@ function missingTexturesModal() {
         close();
         refresh();
       } else if (t.dataset.assign) {
-        await opRemap(t.dataset.assign);
+        // Start the dialog next to the model being inspected if it uses this file, else the first user.
+        const users = byName.get(t.dataset.assign.toLowerCase())?.models || [];
+        await opRemap(t.dataset.assign, null, users.includes(S.active) ? S.active : users[0]);
         close();
         missingTexturesModal();
       } else if (t.dataset.unmap) {

@@ -134,6 +134,10 @@ There are several ways to fix missing textures, from broadest to most specific:
    normal, emissive, roughness, metalness, ambient occlusion) or drag an image onto it.
    Remove an override with **×**.
 
+The file and folder dialogs for these all open in the model's own folder (with several
+models selected, the first one's). From the Missing textures dialog, that's the folder of
+the model you're inspecting if it uses that texture, otherwise the first model that does.
+
 **Reset** (or **Reset textures**) removes the model's folder, all-materials and per-slot
 overrides. Assignments made in the Missing textures dialog are library-wide and are
 removed from that dialog.

@@ -205,15 +205,30 @@ function runDevHooks(win) {
 // ---------------------------------------------------------------------------
 // IPC
 
+/** A native, existing directory for a dialog's defaultPath, or undefined (OS default). */
+async function dialogStart(dir) {
+  if (typeof dir !== 'string' || !dir) return undefined;
+  const native = path.resolve(/^[A-Za-z]:$/.test(dir) ? dir + '/' : dir); // bare "C:" is drive-relative
+  try {
+    if ((await fsp.stat(native)).isDirectory()) return native;
+  } catch { /* fall through */ }
+  return undefined;
+}
+
 function registerIpc() {
-  ipcMain.handle('pick-folder', async (_e, title) => {
-    const r = await dialog.showOpenDialog(mainWindow, { title: title || 'Choose folder', properties: ['openDirectory'] });
+  ipcMain.handle('pick-folder', async (_e, title, startDir) => {
+    const r = await dialog.showOpenDialog(mainWindow, {
+      title: title || 'Choose folder',
+      defaultPath: await dialogStart(startDir),
+      properties: ['openDirectory'],
+    });
     return r.canceled ? null : r.filePaths[0];
   });
 
-  ipcMain.handle('pick-image', async (_e, { title, multi } = {}) => {
+  ipcMain.handle('pick-image', async (_e, { title, multi, startDir } = {}) => {
     const r = await dialog.showOpenDialog(mainWindow, {
       title: title || 'Choose texture',
+      defaultPath: await dialogStart(startDir),
       properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
       filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'tga', 'bmp', 'gif', 'webp'] }],
     });
