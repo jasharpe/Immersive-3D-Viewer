@@ -78,8 +78,14 @@ hearted if any of its formats is, and removing the heart clears it from every fo
 Click a card to load the model in the inspector on the right.
 
 - **Mouse:** left-drag to orbit, right-drag (or `Shift`+drag) to pan, scroll to zoom.
-- **Toolbar** (top right of the viewer): reset camera, auto-rotate, wireframe, grid,
-  background colour.
+- **Idle rotation:** a newly shown model slowly orbits by default. It stops as soon as you
+  drag, zoom or pan.
+- **Saved views:** once you've moved the camera, that view is remembered for the model
+  (also across restarts) and restored when you come back to it.
+- **Toolbar** (top right of the viewer):
+  - **Reset camera:** frames the model and forgets its saved view.
+  - **Idle rotation:** turns the default rotation on or off.
+  - Wireframe, grid and background colour.
 - **Arrow keys** move to the next or previous model in the grid. `Space` selects or
   deselects the active model.
 - **Animations:** if the model has animation clips, pick one from the dropdown to play it.

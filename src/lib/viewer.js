@@ -22,7 +22,22 @@ export class Viewer {
     this.camera.position.set(2, 2, 3);
     this.controls = new OrbitControls(this.camera, this.canvas);
     this.controls.enableDamping = true;
-    this.controls.addEventListener('change', () => { this.dirty = true; });
+    this.controls.autoRotateSpeed = 0.8; // ~75 s per revolution: a gentle idle orbit
+    this.autoRotateDefault = true;
+    this.userMoved = false;
+    // Callbacks set by the app: onViewChange(path, view | null) when the user moves the camera
+    // (null = forget the saved view), onAutoRotateChange(on) to keep the toolbar in sync.
+    this.onViewChange = null;
+    this.onAutoRotateChange = null;
+    // Any manual orbit/zoom/pan cancels the idle rotation and makes the view "the user's".
+    this.controls.addEventListener('start', () => {
+      this.userMoved = true;
+      this.setAutoRotate(false);
+    });
+    this.controls.addEventListener('change', () => {
+      this.dirty = true;
+      if (this.userMoved && this.current) this.onViewChange?.(this.currentPath, this.getView());
+    });
     this.lastTime = performance.now();
     this.current = null;
     this.mixer = null;
@@ -54,7 +69,7 @@ export class Viewer {
     const now = performance.now();
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
-    const moved = this.controls.update();
+    const moved = this.controls.update(dt);
     if (this.mixer && this.playing) { this.mixer.update(dt); this.dirty = true; }
     if (this.controls.autoRotate) this.dirty = true;
     if (moved || this.dirty) {
@@ -143,7 +158,11 @@ export class Viewer {
   }
 
   /** Shows a model (from the cache when possible). Resolves to the load result, or null if superseded. */
-  async show(modelPath, loadOpts) {
+  /**
+   * @param view optional saved camera view ({ position, target }) to restore; without one the
+   *             model is framed and the idle rotation starts (if enabled).
+   */
+  async show(modelPath, loadOpts, view = null) {
     const token = ++this.token;
     this.target = modelPath;
     let res;
@@ -155,13 +174,23 @@ export class Viewer {
     }
     if (token !== this.token) return null;
     this.detach();
+    this.userMoved = false; // framing the new model isn't a user move
     this.current = res;
+    this.currentPath = modelPath;
     this.scene.add(res.object);
     this.setWireframe(this.wireframe);
     applyPixelated(res.object, !!loadOpts.pixelated);
     this.box = boundsOf(res.object);
     this.buildGrid();
-    this.resetView();
+    this.frame();
+    if (view?.position && view?.target) {
+      this.setView(view);
+      this.userMoved = !view.autoRotate;
+      this.setAutoRotate(!!view.autoRotate);
+    } else {
+      this.userMoved = false;
+      this.setAutoRotate(this.autoRotateDefault);
+    }
     this.mixer = res.animations.length ? new THREE.AnimationMixer(res.object) : null;
     this.playing = false;
     this.dirty = true;
@@ -210,8 +239,19 @@ export class Viewer {
     this.scene.add(this.grid);
   }
 
-  resetView() {
+  /** Frames the model from the default angle. */
+  frame() {
+    this.stopInertia();
     if (this.box) frameBox(this.camera, this.box, { controls: this.controls, margin: 1.15 });
+    this.dirty = true;
+  }
+
+  /** Reset button: default framing, forget the saved view, resume the idle rotation. */
+  resetView() {
+    this.frame();
+    this.userMoved = false;
+    this.setAutoRotate(this.autoRotateDefault);
+    if (this.current) this.onViewChange?.(this.currentPath, null);
     this.dirty = true;
   }
 
@@ -232,7 +272,43 @@ export class Viewer {
     this.dirty = true;
   }
 
-  setAutoRotate(on) { this.controls.autoRotate = on; this.dirty = true; }
+  setAutoRotate(on) {
+    const changed = this.controls.autoRotate !== on;
+    this.controls.autoRotate = on;
+    this.dirty = true;
+    if (changed) this.onAutoRotateChange?.(on);
+  }
+
+  /** Toolbar toggle: sets the default for every model and applies it to this one. */
+  setAutoRotateDefault(on) {
+    this.autoRotateDefault = on;
+    if (on) {
+      // Rotating again means the user's saved angle no longer applies to this model.
+      this.userMoved = false;
+      if (this.current) this.onViewChange?.(this.currentPath, null);
+    }
+    this.setAutoRotate(on);
+  }
+
+  /** Drops leftover drag momentum so it doesn't carry over to another model or view. */
+  stopInertia() {
+    // OrbitControls clears its pending deltas when update() runs without damping.
+    this.controls.enableDamping = false;
+    this.controls.update();
+    this.controls.enableDamping = true;
+  }
+
+  getView() {
+    return { position: this.camera.position.toArray(), target: this.controls.target.toArray() };
+  }
+
+  setView(view) {
+    this.stopInertia();
+    this.camera.position.fromArray(view.position);
+    this.controls.target.fromArray(view.target);
+    this.controls.update();
+    this.dirty = true;
+  }
 
   setPixelated(on) { if (this.current) applyPixelated(this.current.object, on); this.dirty = true; }
 

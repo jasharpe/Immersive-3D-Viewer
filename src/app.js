@@ -35,14 +35,14 @@ const S = {
   activeRes: null,
   curVariant: new Map(), // entry key -> chosen model path
   filters: { q: '', exts: new Set(), folder: '', status: 'all', missingName: null },
-  settings: { collapse: true, pixelated: false, cardSize: 150, sort: 'name', thumbsPaused: false, inspW: 420 },
+  settings: { collapse: true, pixelated: false, autoRotate: true, cardSize: 150, sort: 'name', thumbsPaused: false, inspW: 420 },
   recent: [],
   expanded: new Set(['']),
   zoo: null,
 };
 
 function defaultLibState() {
-  return { version: 1, overrides: {}, remap: {}, meta: {}, textureDirs: [], hearts: {} };
+  return { version: 1, overrides: {}, remap: {}, meta: {}, textureDirs: [], hearts: {}, views: {} };
 }
 
 const lib = () => ({ root: S.root, state: S.state });
@@ -820,7 +820,18 @@ let viewer = null;
 const insp = $('#insp');
 
 function ensureViewer() {
-  if (!viewer) viewer = new Viewer($('#viewer-host'));
+  if (!viewer) {
+    viewer = new Viewer($('#viewer-host'));
+    viewer.autoRotateDefault = S.settings.autoRotate;
+    // Remember where the user left the camera for each model (null = forget it).
+    viewer.onViewChange = (path, view) => {
+      if (!path) return;
+      if (view) S.state.views[path] = view;
+      else delete S.state.views[path];
+      saveStateSoon();
+    };
+    viewer.onAutoRotateChange = (on) => document.querySelector('[data-vt="rotate"]').classList.toggle('on', on);
+  }
   return viewer;
 }
 
@@ -842,7 +853,9 @@ async function openInspector(path, { keepView = false } = {}) {
   S.active = path;
   updateAllCards();
   const v = ensureViewer();
-  const saved = keepView && viewer.current ? { pos: v.camera.position.clone(), target: v.controls.target.clone() } : null;
+  // Reloads of the same model keep the camera exactly as it is (including any idle rotation);
+  // otherwise restore the view the user left this model in, if any.
+  const view = keepView && v.current ? { ...v.getView(), autoRotate: v.controls.autoRotate } : S.state.views[path];
   // Preloaded models resolve within the same frame, so only show a loading state for
   // models that actually need loading, and only after a short delay.
   let slow = null;
@@ -855,11 +868,10 @@ async function openInspector(path, { keepView = false } = {}) {
     }, 150);
   }
   try {
-    const res = await v.show(path, { ...loadOptsFor(path), pixelated: S.settings.pixelated });
+    const res = await v.show(path, { ...loadOptsFor(path), pixelated: S.settings.pixelated }, view);
     clearTimeout(slow);
     if (!res || S.active !== path) return;
     S.activeRes = res;
-    if (saved) { v.camera.position.copy(saved.pos); v.controls.target.copy(saved.target); v.controls.update(); }
     $('#viewer-msg').classList.add('hidden');
     renderInspector(m, res);
   } catch (e) {
@@ -1051,7 +1063,7 @@ window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => e.preventDefault());
 
 // Viewer toolbar
-const vtState = { rotate: false, wire: false, grid: true };
+const vtState = { wire: false, grid: true };
 document.querySelectorAll('[data-vt]').forEach((b) => {
   const k = b.dataset.vt;
   b.innerHTML = icon({ reset: 'target', rotate: 'rotate', wire: 'wire', grid: 'grid', bg: 'contrast' }[k]);
@@ -1060,7 +1072,12 @@ document.querySelectorAll('[data-vt]').forEach((b) => {
     const v = ensureViewer();
     if (k === 'reset') v.resetView();
     if (k === 'bg') v.cycleBackground();
-    if (k === 'rotate') { vtState.rotate = !vtState.rotate; v.setAutoRotate(vtState.rotate); b.classList.toggle('on', vtState.rotate); }
+    if (k === 'rotate') {
+      // Turning rotation on or off also sets the default for the next models.
+      S.settings.autoRotate = !v.controls.autoRotate;
+      saveSettings();
+      v.setAutoRotateDefault(S.settings.autoRotate);
+    }
     if (k === 'wire') { vtState.wire = !vtState.wire; v.setWireframe(vtState.wire); b.classList.toggle('on', vtState.wire); }
     if (k === 'grid') { vtState.grid = !vtState.grid; v.setGrid(vtState.grid); b.classList.toggle('on', vtState.grid); }
   };
@@ -1316,4 +1333,4 @@ document.addEventListener('keydown', (e) => {
 })();
 
 // Exposed for automated tests / debugging (see docs/DEVELOPMENT.md).
-window.app = { S, toggleHeart, openLibrary, openInspector, enterZoo, refresh, thumbs, opRemap, opApplyImage, opSetTextureFolder, missingTexturesModal, textureDirsModal, selectAll, clearSelection };
+window.app = { S, getViewer: () => viewer, toggleHeart, openLibrary, openInspector, enterZoo, refresh, thumbs, opRemap, opApplyImage, opSetTextureFolder, missingTexturesModal, textureDirsModal, selectAll, clearSelection };

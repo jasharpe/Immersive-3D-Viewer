@@ -154,11 +154,12 @@ most three at once, well within Chromium's limit.
 | What | Where | Format |
 |---|---|---|
 | App config (window bounds, recent folders, UI settings) | `userData/config.json` | JSON |
-| Library state | `userData/libraries/<sha1(root)[0:16]>/state.json` | `{ version, overrides, remap, meta, textureDirs, hearts }` (`hearts` maps model path → time hearted) |
+| Library state | `userData/libraries/<sha1(root)[0:16]>/state.json` | `{ version, overrides, remap, meta, textureDirs, hearts, views }`. `hearts` maps model path → time hearted, and `views` maps model path → saved camera `{ position, target }` |
 | Thumbnails | `userData/libraries/<…>/thumbs/<sha1(modelPath)[0:24]>.png` | 256×256 PNG |
 
 Writes are atomic (write to a temp file, then rename). Library state is saved with a short
-debounce. The app never writes inside the user's model folders.
+debounce, and any pending save is flushed synchronously (`lib-save-sync`) when the window
+closes. The app never writes inside the user's model folders.
 
 `userData` is `~/Library/Application Support/Immersive 3D Viewer` on macOS,
 `%APPDATA%\Immersive 3D Viewer` on Windows and `~/.config/Immersive 3D Viewer` on Linux.
