@@ -5,6 +5,7 @@ import { loadModel, boundsOf, applyPixelated } from './loader.js';
 import { addStudioLighting, frameBox } from './stage.js';
 
 export const BACKGROUNDS = [0x1d2027, 0x5a5f69, 0xd9dbe0];
+const CACHE_MAX = 10; // loaded models kept in memory (current + neighbours + recent)
 
 export class Viewer {
   constructor(container) {
@@ -29,6 +30,10 @@ export class Viewer {
     this.showGrid = true;
     this.wireframe = false;
     this.token = 0;
+    this.preloadToken = 0;
+    this.cache = new Map(); // path -> { promise, res, used, evicted }
+    this.wanted = new Set();
+    this.target = null;
     this.dirty = true;
 
     new ResizeObserver(() => this.resize()).observe(container);
@@ -58,21 +63,102 @@ export class Viewer {
     }
   }
 
-  /** Loads and shows a model. Resolves to the load result, or null if superseded. */
+  // ------------------------------------------------------------------ model cache
+  // Loaded models are kept in a small LRU cache so that stepping through the library
+  // (and stepping back) is instant. Neighbours are loaded ahead of time with preload().
+
+  /** Returns the cache entry for a path, starting its load if needed. */
+  entry(path, loadOpts) {
+    let e = this.cache.get(path);
+    if (!e) {
+      e = { res: null, used: 0, evicted: false };
+      e.promise = loadModel(path, loadOpts).then((res) => {
+        if (e.evicted) { res.dispose(); throw new Error('Model was evicted from the cache'); }
+        e.res = res;
+        this.warm(res);
+        return res;
+      });
+      e.promise.catch(() => { if (this.cache.get(path) === e) this.cache.delete(path); });
+      this.cache.set(path, e);
+    }
+    e.used = performance.now();
+    this.trim();
+    return e;
+  }
+
+  /** Uploads shaders and textures ahead of time so the first frame doesn't hitch. */
+  warm(res) {
+    try {
+      this.renderer.compile(res.object, this.camera, this.scene);
+      res.object.traverse((o) => {
+        if (!o.material) return;
+        for (const m of [].concat(o.material)) {
+          for (const v of Object.values(m)) {
+            if (v?.isTexture && v.image && v.image.complete !== false) this.renderer.initTexture(v);
+          }
+        }
+      });
+    } catch (err) {
+      console.warn('viewer: warm-up failed', err);
+    }
+  }
+
+  /** Evicts least-recently-used models beyond CACHE_MAX, keeping the shown and wanted ones. */
+  trim() {
+    while (this.cache.size > CACHE_MAX) {
+      let victim = null;
+      for (const [path, e] of this.cache) {
+        if (path === this.target || this.wanted.has(path) || (e.res && e.res === this.current)) continue;
+        if (!victim || e.used < victim[1].used) victim = [path, e];
+      }
+      if (!victim) return;
+      this.cache.delete(victim[0]);
+      victim[1].evicted = true;
+      victim[1].res?.dispose();
+    }
+  }
+
+  /** Loads models in the background, one at a time, in the given order. */
+  async preload(paths, optsFor) {
+    const token = ++this.preloadToken;
+    this.wanted = new Set(paths);
+    for (const p of paths) {
+      if (token !== this.preloadToken) return;
+      if (this.cache.has(p)) { this.cache.get(p).used = performance.now(); continue; }
+      await this.entry(p, optsFor(p)).promise.catch(() => {});
+    }
+  }
+
+  /** True when the model is loaded and can be shown without waiting. */
+  isReady(path) { return !!this.cache.get(path)?.res; }
+
+  /** Drops every cached model (e.g. after textures change). The shown one stays until replaced. */
+  invalidateCache() {
+    for (const e of this.cache.values()) {
+      e.evicted = true;
+      if (e.res && e.res === this.current) e.res.orphan = true;
+      else e.res?.dispose();
+    }
+    this.cache.clear();
+  }
+
+  /** Shows a model (from the cache when possible). Resolves to the load result, or null if superseded. */
   async show(modelPath, loadOpts) {
     const token = ++this.token;
+    this.target = modelPath;
     let res;
     try {
-      res = await loadModel(modelPath, loadOpts);
+      res = await this.entry(modelPath, loadOpts).promise;
     } catch (e) {
-      if (token === this.token) this.clear();
+      if (token === this.token) this.detach();
       throw e;
     }
-    if (token !== this.token) { res.dispose(); return null; }
-    this.clear();
+    if (token !== this.token) return null;
+    this.detach();
     this.current = res;
     this.scene.add(res.object);
-    if (this.wireframe) this.setWireframe(true);
+    this.setWireframe(this.wireframe);
+    applyPixelated(res.object, !!loadOpts.pixelated);
     this.box = boundsOf(res.object);
     this.buildGrid();
     this.resetView();
@@ -82,11 +168,30 @@ export class Viewer {
     return res;
   }
 
-  clear() {
-    if (this.current) { this.current.dispose(); this.current = null; }
-    if (this.mixer) { this.mixer.stopAllAction(); this.mixer = null; }
+  /** Takes the current model out of the scene; it stays cached unless it was orphaned. */
+  detach() {
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer = null;
+      this.current?.object.traverse((o) => o.isSkinnedMesh && o.pose());
+    }
+    if (this.current) {
+      this.scene.remove(this.current.object);
+      if (this.current.orphan) this.current.dispose();
+      this.current = null;
+    }
     this.playing = false;
     this.dirty = true;
+  }
+
+  /** Empties the viewer and the cache (e.g. when another library is opened). */
+  clear() {
+    this.token++;
+    this.preloadToken++;
+    this.target = null;
+    this.wanted = new Set();
+    this.detach();
+    this.invalidateCache();
   }
 
   buildGrid() {

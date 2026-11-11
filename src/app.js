@@ -738,6 +738,7 @@ function opUnmap(name) {
 }
 
 function afterOverrideChange(paths, msg) {
+  viewer?.invalidateCache(); // cached models were loaded with the old textures
   saveStateSoon();
   toast(msg);
   invalidateThumbs(paths);
@@ -837,23 +838,46 @@ async function openInspector(path, { keepView = false } = {}) {
   updateAllCards();
   const v = ensureViewer();
   const saved = keepView && viewer.current ? { pos: v.camera.position.clone(), target: v.controls.target.clone() } : null;
-  renderInspector(m, null);
-  $('#viewer-msg').textContent = 'Loading…';
-  $('#viewer-msg').classList.remove('hidden');
+  // Preloaded models resolve within the same frame, so only show a loading state for
+  // models that actually need loading, and only after a short delay.
+  let slow = null;
+  if (!v.isReady(path)) {
+    renderInspector(m, null);
+    slow = setTimeout(() => {
+      if (S.active !== path) return;
+      $('#viewer-msg').textContent = 'Loading…';
+      $('#viewer-msg').classList.remove('hidden');
+    }, 150);
+  }
   try {
     const res = await v.show(path, { ...loadOptsFor(path), pixelated: S.settings.pixelated });
+    clearTimeout(slow);
     if (!res || S.active !== path) return;
     S.activeRes = res;
     if (saved) { v.camera.position.copy(saved.pos); v.controls.target.copy(saved.target); v.controls.update(); }
     $('#viewer-msg').classList.add('hidden');
     renderInspector(m, res);
   } catch (e) {
+    clearTimeout(slow);
     console.error(e);
     if (S.active !== path) return;
     $('#viewer-msg').textContent = 'Failed to load: ' + (e?.message || e);
+    $('#viewer-msg').classList.remove('hidden');
     S.activeRes = null;
     renderInspector(m, null, e);
   }
+  preloadNeighbours(path);
+}
+
+/** Loads the models the arrow keys can reach next (right, left, down, up). */
+function preloadNeighbours(path) {
+  if (!viewer || S.active !== path) return;
+  const i = S.entries.findIndex((x) => x.variants.some((v) => v.path === path));
+  if (i < 0) return;
+  const paths = [i + 1, i - 1, i + grid.cols, i - grid.cols]
+    .filter((j) => j >= 0 && j < S.entries.length && j !== i)
+    .map((j) => S.entries[j].model.path);
+  viewer.preload([...new Set(paths)], (p) => ({ ...loadOptsFor(p), pixelated: S.settings.pixelated }));
 }
 
 function renderInspector(m, res, err) {
