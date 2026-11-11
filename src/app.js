@@ -650,6 +650,42 @@ function toggleSelect(e) {
   updateAllCards();
 }
 
+// ---------------------------------------------------------------------------- go to folder
+/** True when the library is already showing exactly this model's folder, unfiltered. */
+function inFolderView(path) {
+  const m = S.byPath.get(path);
+  const f = S.filters;
+  return !!m && f.folder === m.relDir && f.status === 'all' && !f.q;
+}
+
+/**
+ * Shows the folder containing a model (expanding the folder tree to it), with the model
+ * scrolled into view and still selected. Status filters and search are cleared so the
+ * whole folder shows; format filters stay.
+ */
+function goToFolder(path) {
+  const m = S.byPath.get(path);
+  if (!m) return;
+  S.filters.folder = m.relDir;
+  S.filters.status = 'all';
+  S.filters.missingName = null;
+  S.filters.q = '';
+  $('#search').value = '';
+  let acc = '';
+  for (const part of m.relDir.split('/').filter(Boolean)) S.expanded.add((acc = acc ? acc + '/' + part : part));
+  refresh();
+  renderTree();
+  document.querySelector('#tree .row.on')?.scrollIntoView({ block: 'nearest' });
+  const e = S.entries.find((x) => x.variants.some((v) => v.path === path));
+  if (e) {
+    S.curVariant.set(e.key, path);
+    e.model = m;
+    S.anchor = e.index;
+    scrollToEntry(e);
+  }
+  openInspector(path, { keepView: true });
+}
+
 function selectRange(a, b) {
   const [lo, hi] = a < b ? [a, b] : [b, a];
   for (let i = lo; i <= hi; i++) S.selection.add(S.entries[i].key);
@@ -869,6 +905,7 @@ function showCardMenu(e, x, y) {
     { label: multi ? 'Copy paths' : 'Copy path', run: async () => { await api.copy(targets.map((t) => t.model.path).join('\n')); toast(multi ? `Copied ${targets.length} paths` : 'Copied path: ' + e.model.path); } },
   ];
   if (!multi) {
+    if (!inFolderView(e.model.path)) items.push({ label: 'Go to folder', run: () => goToFolder(e.model.path) });
     items.push({ label: reveal, run: () => api.reveal(e.model.path) });
     items.push({ label: S.selection.has(e.key) ? 'Deselect' : 'Select', run: () => toggleSelect(e) });
   }
@@ -995,7 +1032,8 @@ function renderInspector(m, res, err) {
     <div class="actions">
       <button class="btn primary" data-act="copy">${icon('copy')} Copy path</button>
       <button class="btn heart-btn ${isHeartedAny(m.path) ? 'on' : ''}" data-act="heart" title="Heart (H)">${icon('heart')} ${isHeartedAny(m.path) ? 'Hearted' : 'Heart'}</button>
-      <button class="btn" data-act="reveal">${icon('folder')} ${isMac ? 'Reveal' : 'Show in folder'}</button>
+      ${inFolderView(m.path) ? '' : `<button class="btn" data-act="goto" title="Show this model's folder in the library">${icon('folder')} Go to folder</button>`}
+      <button class="btn" data-act="reveal" title="${isMac ? 'Reveal in Finder' : 'Show in the file manager'}">${icon('external')} ${isMac ? 'Finder' : 'Show in folder'}</button>
     </div>
     <div class="stats">${stats.join('')}</div>
     ${anim}
@@ -1079,6 +1117,7 @@ insp.addEventListener('click', async (ev) => {
   if (t.dataset.act === 'copy') return copyPath(path);
   if (t.dataset.act === 'heart') return toggleHeart(path);
   if (t.dataset.act === 'reveal') return api.reveal(path);
+  if (t.dataset.act === 'goto') return goToFolder(path);
   if (t.dataset.act === 'texdir') return opSetTextureFolder([path]);
   if (t.dataset.act === 'teximg') return opApplyImage([path]);
   if (t.dataset.act === 'reset') return opReset([path]);

@@ -82,6 +82,12 @@ hearted if any of its formats is, and removing the heart clears it from every fo
 
 Click a card to load the model in the inspector on the right.
 
+- **Go to folder** (also in the card's right-click menu): switches the library to the
+  folder containing the model, expanding the folder tree to it, with the model scrolled
+  into view and still selected. Search and status filters are cleared so the whole folder
+  shows. It's hidden when you're already looking at that folder.
+- **Finder** / **Show in folder**: shows the file in your system's file manager.
+
 - **Mouse:** left-drag to orbit, right-drag (or `Shift`+drag) to pan, scroll to zoom.
 - **Idle rotation:** a newly shown model slowly orbits by default (turn this off in
   *Preferences*). It stops as soon as you drag, zoom or pan.
