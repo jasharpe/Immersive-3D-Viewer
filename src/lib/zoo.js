@@ -604,13 +604,18 @@ export class Zoo {
     const hit = new THREE.Vector3();
     let best = null;
     let bestD = 80;
+    // A box the camera is standing inside "hits" at distance 0. Big models have big boxes,
+    // so only use it when nothing else is under the crosshair.
+    let inside = null;
     for (const ex of this.exhibits) {
       if (ex.hitBox.distanceToPoint(ray.origin) > bestD) continue;
+      if (ex.hitBox.containsPoint(ray.origin)) { inside ??= ex; continue; }
       if (ray.intersectBox(ex.hitBox, hit)) {
         const d = hit.distanceTo(ray.origin);
         if (d < bestD) { bestD = d; best = ex; }
       }
     }
+    best ??= inside;
     if (best === this.hovered) return;
     if (this.hovered) this.hovered.ped.material = this.pedMat;
     this.hovered = best;
