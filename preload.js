@@ -20,4 +20,5 @@ contextBridge.exposeInMainWorld('api', {
   quit: () => ipcRenderer.invoke('quit'),
   // Absolute path of a file dropped from the OS (File.path was removed in Electron 32).
   pathForFile: (file) => webUtils.getPathForFile(file),
+  onOpenPreferences: (fn) => ipcRenderer.on('open-preferences', () => fn()),
 });

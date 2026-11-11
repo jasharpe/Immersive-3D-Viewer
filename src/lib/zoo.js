@@ -27,7 +27,9 @@ export class Zoo {
    * @param items    [{path, name, group, rel, size?, scale?}]  size: [x, y, z] metres if already known (lays the
    *                   rows out at their final spacing before anything loads); scale: display scale (1 = real size)
    * @param options  { makeLoadOpts(path), startAt (path to spawn in front of), autoLock (skip the start menu; call from a
-   *                   key/click handler so pointer lock is allowed), pixelated, onScale(item, scale), onCopy(item),
+   *                   key/click handler so pointer lock is allowed), fly (start flying; default true),
+   *                   maxSize (metres; bigger models are shrunk to fit, 0 = no limit), pixelated,
+   *                   onScale(item, scale), onCopy(item),
    *                   isHearted(item), onToggleHeart(item) → bool, onInspect(item), onSize(item, [x, y, z]), onExit() }
    */
   constructor(host, items, options) {
@@ -39,7 +41,7 @@ export class Zoo {
     this.rows = [];
     this.keys = new Set();
     this.velocity = new THREE.Vector3();
-    this.fly = true; // walking (gravity, jump) is one F away
+    this.fly = options.fly ?? true; // walking (gravity, jump) is one F away
     this.onGround = true;
     this.showLabels = true;
     this.animate = true;
@@ -229,7 +231,7 @@ export class Zoo {
    */
   faceStart(k) {
     const ex = this.startEx;
-    const g = ex.s;
+    const g = this.shown(ex);
     const s = ex.size || ex.hint;
     const h = s ? s.y * g : PLACEHOLDER;
     const w = s ? Math.max(s.x, s.z) * g : PLACEHOLDER;
@@ -247,11 +249,28 @@ export class Zoo {
     this.camera.lookAt(ex.tx, this.lookY, ex.tz);
   }
 
+  /**
+   * Shrink factor that keeps the model's largest dimension within maxSize (some assets are
+   * hundreds of metres long), or 1.
+   */
+  fit(ex) {
+    const s = ex.size || ex.hint;
+    const max = this.opts.maxSize;
+    if (!s || !(max > 0)) return 1;
+    const big = Math.max(s.x, s.y, s.z);
+    return big > max ? max / big : 1;
+  }
+
+  /** Display scale: the size cap times the visitor's own +/- scale. */
+  shown(ex) {
+    return ex.s * this.fit(ex);
+  }
+
   /** Pedestal radius that fits the model's footprint at its display scale. */
   pedRadius(ex) {
     const s = ex.size || ex.hint;
     if (!s) return MIN_PED_R + 0.1;
-    const half = Math.hypot(s.x, s.z) * 0.5 * ex.s;
+    const half = Math.hypot(s.x, s.z) * 0.5 * this.shown(ex);
     return Math.max(MIN_PED_R, half * 1.05 + 0.08);
   }
 
@@ -289,7 +308,7 @@ export class Zoo {
     for (const row of this.rows) row.x = -1.5 + dx;
     this.bounds = { minX: -10 + dx, maxX: maxX + 10 + dx, minZ: -AISLE * 3 + dz, maxZ: z + 5 + dz };
     if (snap) {
-      for (const ex of this.exhibits) { ex.cx = ex.tx; ex.cz = ex.tz; ex.r = ex.tr; ex.g = ex.s; this.place(ex); }
+      for (const ex of this.exhibits) { ex.cx = ex.tx; ex.cz = ex.tz; ex.r = ex.tr; ex.g = this.shown(ex); this.place(ex); }
       for (const row of this.rows) { row.cx = row.x; row.cz = row.z; this.placeSign(row); }
     }
   }
@@ -333,7 +352,8 @@ export class Zoo {
     this.scene.add(label);
 
     const ex = { item, ped, holder, placeholder, label, hearted: !!this.opts.isHearted?.(item), size: null, hint: item.size ? new THREE.Vector3().fromArray(item.size) : null, hitBox: new THREE.Box3(), mixer: null, result: null, cx: 0, cz: 0, tx: 0, tz: 0, r: 0, tr: 0, s: 1, g: 1 };
-    ex.s = ex.g = clampScale(item.scale || 1);
+    ex.s = clampScale(item.scale || 1);
+    ex.g = this.shown(ex);
     this.updateLabel(ex);
     this.exhibits.push(ex);
     return ex;
@@ -385,7 +405,10 @@ export class Zoo {
     this.anchorEx = ex;
     this.anchor = { x: ex.tx, z: ex.tz };
     this.relayout(false);
-    this.toast(`${ex.item.name}: ${next === 1 ? 'real size' : `×${fmtScale(next)}  (0 = real size)`}`);
+    const capped = this.fit(ex) < 1;
+    const shown = this.shown(ex);
+    const base = capped ? 'default size (shrunk to fit)' : 'real size';
+    this.toast(`${ex.item.name}: ${next === 1 ? base : `×${fmtScale(shown)}  (0 = ${capped ? 'default' : 'real'} size)`}`);
     this.opts.onScale?.(ex.item, next);
   }
 
@@ -514,12 +537,13 @@ export class Zoo {
     // Glide exhibits and signs toward their layout targets.
     const k = 1 - Math.exp(-dt * 10);
     for (const ex of this.exhibits) {
-      if (Math.abs(ex.tx - ex.cx) + Math.abs(ex.tz - ex.cz) + Math.abs(ex.tr - ex.r) + Math.abs(ex.s - ex.g) < 1e-4) continue;
+      const want = this.shown(ex);
+      if (Math.abs(ex.tx - ex.cx) + Math.abs(ex.tz - ex.cz) + Math.abs(ex.tr - ex.r) + Math.abs(want - ex.g) < 1e-4 * Math.max(1, want)) continue;
       ex.cx += (ex.tx - ex.cx) * k;
       ex.cz += (ex.tz - ex.cz) * k;
       ex.r += (ex.tr - ex.r) * k;
-      ex.g += (ex.s - ex.g) * k;
-      if (Math.abs(ex.s - ex.g) < 1e-4 * ex.s) ex.g = ex.s;
+      ex.g += (want - ex.g) * k;
+      if (Math.abs(want - ex.g) < 1e-4 * want) ex.g = want;
       this.place(ex);
     }
     for (const row of this.rows) {
@@ -631,7 +655,9 @@ export class Zoo {
     this.$('.zoo-hover-name').textContent = (ex.hearted ? '♥ ' : '') + ex.item.name;
     this.$('.zoo-hover-name').classList.toggle('hearted', ex.hearted);
     this.$('.zoo-hover-path').textContent = ex.item.rel;
-    this.$('.zoo-hover-size').textContent = ex.size ? fmtDims(ex.size.toArray()) + (ex.s === 1 ? '' : ` (shown ×${fmtScale(ex.s)})`) : '';
+    const shown = this.shown(ex);
+    const note = shown === 1 ? '' : ` (shown ×${fmtScale(shown)}${this.fit(ex) < 1 ? `, too big: shrunk to fit ${this.opts.maxSize} m` : ''})`;
+    this.$('.zoo-hover-size').textContent = ex.size ? fmtDims(ex.size.toArray()) + note : '';
     this.$('.zoo-hover').classList.remove('hidden');
   }
 

@@ -83,13 +83,14 @@ hearted if any of its formats is, and removing the heart clears it from every fo
 Click a card to load the model in the inspector on the right.
 
 - **Mouse:** left-drag to orbit, right-drag (or `Shift`+drag) to pan, scroll to zoom.
-- **Idle rotation:** a newly shown model slowly orbits by default. It stops as soon as you
-  drag, zoom or pan.
+- **Idle rotation:** a newly shown model slowly orbits by default (turn this off in
+  *Preferences*). It stops as soon as you drag, zoom or pan.
 - **Saved views:** once you've moved the camera, that view is remembered for the model
   (also across restarts) and restored when you come back to it.
 - **Toolbar** (top right of the viewer):
   - **Reset camera:** frames the model and forgets its saved view.
-  - **Idle rotation:** turns the default rotation on or off.
+  - **Idle rotation:** starts or stops rotation for this model. Stopping keeps the current
+    angle for next time. The default for all models is in *Preferences*.
   - Wireframe, grid and background colour. The grid hides itself while you look at the
     model from below.
 - **Arrow keys** move to the next or previous model in the grid. `Space` selects or
@@ -181,7 +182,9 @@ away. Models without a known size make room for themselves as they load, while t
 you started at stays put.
 
 Some asset packs are modelled far larger or smaller than life. Look at a model and press
-`=` / `+` or `-` / `_` to make it bigger or smaller, or `0` to return it to real size. The
+`=` / `+` or `-` / `_` to make it bigger or smaller, or `0` to return it to its default size.
+Models larger than 20 m in any direction (some are hundreds of metres long) are shrunk to
+fit by default. The tooltip says so, and the limit can be changed in *Preferences*. The
 model stays where it is and its neighbours make room. Each model's scale is remembered with
 the library. Click **Click to walk around** to start.
 
@@ -194,7 +197,7 @@ the library. Click **Click to walk around** to start.
 | `F` | Switch between flying (the default; no gravity or collisions, WASD stays horizontal) and walking |
 | `=` / `+` | Make the model under the crosshair bigger (hold to repeat) |
 | `-` / `_` | Make it smaller |
-| `0` | Return it to real size |
+| `0` | Return it to its default size (real size, unless it's over the size limit) |
 | Left click | Copy the path of the model under the crosshair |
 | `H` / right click | Heart or un-heart the model under the crosshair |
 | `E` | Leave the Zoo and open the model under the crosshair in the inspector |
@@ -205,11 +208,25 @@ The model you're looking at gets a gold pedestal and its name and path appear be
 crosshair, with its real dimensions. Animated models play their first animation clip; turn this off in the `Esc` menu
 if it costs too much performance.
 
+## Preferences
+
+Open with the gear button in the top bar, `⌘,` (macOS, also *Immersive 3D Viewer →
+Preferences…*) or `Ctrl+,`. Changes apply immediately.
+
+| Preference | Default | |
+|---|---|---|
+| Slowly rotate models | On | Idle rotation in the viewer for models without a saved view |
+| Show the floor grid | On | The viewer's grid button still toggles it for the session |
+| Start in fly mode | On | Zoo starts flying; `F` switches to walking |
+| Largest model size | 20 m | Zoo models bigger than this are shrunk to fit; `0` = no limit |
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 |---|---|
 | `⌘F` / `Ctrl+F` | Focus search |
+| `⌘,` / `Ctrl+,` | Preferences |
+| `Z` | Enter the Zoo (and leave it again) |
 | `⌘C` / `Ctrl+C` | Copy the active (or selected) model paths |
 | `⌘A` / `Ctrl+A` | Select all shown models |
 | `H` | Heart / un-heart the active model |

@@ -144,8 +144,9 @@ most three at once, well within Chromium's limit.
   - Layout: entries are grouped by `relDir`, `PER_ROW` per row, with rows spaced along Z.
     Models are shown at real size, turned 180° to face the spawn side.
   - Each pedestal is a unit cylinder scaled to the model's footprint at that exhibit's
-    display scale (`+`/`-`/`0` change the scale of the exhibit under the crosshair, saved in
-    `zooScales`). `relayout()` recomputes target positions whenever a model loads or is
+    display scale: `shown(ex) = ex.s × fit(ex)`, where `ex.s` is the visitor's `+`/`-`/`0`
+    scale (saved in `zooScales`) and `fit` shrinks models whose largest dimension exceeds
+    the *Largest model size* preference. `relayout()` recomputes target positions whenever a model loads or is
     resized, and exhibits glide to their targets in `tick()`.
   - Footprints come from `meta[path].size`, recorded by the thumbnailer and by the Zoo
     itself (`onSize`), so the layout is usually final before anything loads.
@@ -157,7 +158,8 @@ most three at once, well within Chromium's limit.
   - The player uses `PointerLockControls` for looking. Movement, gravity, jumping, fly mode
     and pedestal collision (circle tests) are handled in `Zoo.move()`.
   - Picking intersects the centre ray with each exhibit's expanded bounding box. That's
-    cheap and forgiving for small props.
+    cheap and forgiving for small props. A box containing the camera only wins when
+    nothing else is hit, since big exhibits have boxes you can stand inside.
   - The shadow-casting sun follows the player so a 56 m shadow frustum is enough.
 
 ## Persistence

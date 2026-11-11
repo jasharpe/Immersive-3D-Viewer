@@ -35,7 +35,7 @@ const S = {
   activeRes: null,
   curVariant: new Map(), // entry key -> chosen model path
   filters: { q: '', exts: new Set(), folder: '', status: 'all', missingName: null },
-  settings: { collapse: true, pixelated: false, autoRotate: true, cardSize: 150, sort: 'name', thumbsPaused: false, inspW: 420 },
+  settings: { collapse: true, pixelated: false, autoRotate: true, showGrid: true, zooFly: true, zooMaxSize: 20, cardSize: 150, sort: 'name', thumbsPaused: false, inspW: 420 },
   recent: [],
   expanded: new Set(['']),
   zoo: null,
@@ -893,6 +893,7 @@ function ensureViewer() {
   if (!viewer) {
     viewer = new Viewer($('#viewer-host'));
     viewer.autoRotateDefault = S.settings.autoRotate;
+    viewer.setGrid(vtState.grid);
     // Remember where the user left the camera for each model (null = forget it).
     viewer.onViewChange = (path, view) => {
       if (!path) return;
@@ -1133,21 +1134,15 @@ window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => e.preventDefault());
 
 // Viewer toolbar
-const vtState = { wire: false, grid: true };
+const vtState = { wire: false, grid: true }; // grid follows the showGrid preference at startup
 document.querySelectorAll('[data-vt]').forEach((b) => {
   const k = b.dataset.vt;
   b.innerHTML = icon({ reset: 'target', rotate: 'rotate', wire: 'wire', grid: 'grid', bg: 'contrast' }[k]);
-  if (k === 'grid') b.classList.add('on');
   b.onclick = () => {
     const v = ensureViewer();
     if (k === 'reset') v.resetView();
     if (k === 'bg') v.cycleBackground();
-    if (k === 'rotate') {
-      // Turning rotation on or off also sets the default for the next models.
-      S.settings.autoRotate = !v.controls.autoRotate;
-      saveSettings();
-      v.setAutoRotateDefault(S.settings.autoRotate);
-    }
+    if (k === 'rotate') v.toggleAutoRotate(); // this model only; the default is a preference
     if (k === 'wire') { vtState.wire = !vtState.wire; v.setWireframe(vtState.wire); b.classList.toggle('on', vtState.wire); }
     if (k === 'grid') { vtState.grid = !vtState.grid; v.setGrid(vtState.grid); b.classList.toggle('on', vtState.grid); }
   };
@@ -1193,6 +1188,58 @@ function modal(title, bodyHtml, { onClick, foot = '' } = {}) {
   $('#modal-root').appendChild(back);
   return { close, el: back };
 }
+
+// ---------------------------------------------------------------------------- preferences
+const PREFS = [
+  { section: 'Viewer' },
+  { key: 'autoRotate', label: 'Slowly rotate models', hint: 'Turns each model until you move the camera. The rotate button in the viewer toolbar still starts or stops it for the model you’re looking at.' },
+  { key: 'showGrid', label: 'Show the floor grid', hint: 'The grid button in the viewer toolbar hides or shows it until the app restarts.' },
+  { section: 'Zoo' },
+  { key: 'zooFly', label: 'Start in fly mode', hint: 'No gravity: Space and C move up and down. Press F in the Zoo to switch between flying and walking.' },
+  { key: 'zooMaxSize', type: 'number', unit: 'm', min: 0, label: 'Largest model size', hint: 'Models bigger than this in any direction are shrunk to fit; + and − still resize them. 0 shows everything at real size.' },
+];
+
+function applyPref(key) {
+  const on = S.settings[key];
+  if (key === 'autoRotate') viewer?.setAutoRotateDefault(on);
+  if (key === 'showGrid') setGridShown(on);
+}
+
+function setGridShown(on) {
+  vtState.grid = on;
+  viewer?.setGrid(on);
+  document.querySelector('[data-vt="grid"]').classList.toggle('on', on);
+}
+
+function preferencesModal() {
+  if (document.querySelector('.modal-back.prefs')) return;
+  const body = PREFS.map((p) => {
+    if (p.section) return `<h4 class="pref-section">${esc(p.section)}</h4>`;
+    const text = `<span><b>${esc(p.label)}</b><span class="hint">${esc(p.hint)}</span></span>`;
+    if (p.type === 'number') {
+      return `<label class="pref num">${text}<span class="pref-num"><input type="number" data-pref="${p.key}" min="${p.min}" step="1" value="${S.settings[p.key]}"> ${esc(p.unit)}</span></label>`;
+    }
+    return `<label class="pref"><input type="checkbox" data-pref="${p.key}" ${S.settings[p.key] ? 'checked' : ''}>${text}</label>`;
+  }).join('');
+  const m = modal('Preferences', body);
+  m.el.classList.add('prefs');
+  m.el.addEventListener('change', (e) => {
+    const k = e.target.dataset.pref;
+    if (!k) return;
+    if (e.target.type === 'number') {
+      const n = Math.max(0, Number(e.target.value) || 0);
+      e.target.value = n;
+      S.settings[k] = n;
+    } else {
+      S.settings[k] = e.target.checked;
+    }
+    saveSettings();
+    applyPref(k);
+  });
+}
+$('#btn-prefs').innerHTML = icon('settings');
+$('#btn-prefs').onclick = preferencesModal;
+api.onOpenPreferences(() => { if (!S.zoo) preferencesModal(); });
 
 function missingTexturesModal() {
   if (!S.root) return;
@@ -1295,6 +1342,8 @@ function enterZoo(entries = S.entries, { autoLock = false } = {}) {
     makeLoadOpts: loadOptsFor,
     startAt,
     autoLock,
+    fly: S.settings.zooFly,
+    maxSize: S.settings.zooMaxSize,
     pixelated: S.settings.pixelated,
     // Per-model display scale in the zoo, kept with the library (many packs aren't authored at real size).
     onScale: (it, scale) => {
@@ -1374,6 +1423,7 @@ document.addEventListener('keydown', (e) => {
   const mod = isMac ? e.metaKey : e.ctrlKey;
   const inInput = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
   if (mod && e.key.toLowerCase() === 'f') { e.preventDefault(); $('#search').focus(); $('#search').select(); return; }
+  if (mod && e.key === ',') { e.preventDefault(); preferencesModal(); return; }
   if (e.key === 'Escape') {
     if (document.querySelector('.modal-back')) { document.querySelector('.modal-back').remove(); return; }
     if (inInput) { document.activeElement.blur(); return; }
@@ -1415,11 +1465,13 @@ document.addEventListener('keydown', (e) => {
 (async () => {
   const cfg = await api.configGet();
   Object.assign(S.settings, cfg.settings || {});
+  delete S.settings.zooScale; // replaced by per-model scales (state.zooScales)
   S.settings.thumbsPaused = false;
   S.recent = cfg.recent || [];
   $('#opt-collapse').checked = S.settings.collapse;
   $('#opt-pixel').checked = S.settings.pixelated;
   $('#opt-sort').value = S.settings.sort;
+  setGridShown(S.settings.showGrid);
   $('#opt-size').value = S.settings.cardSize;
   document.documentElement.style.setProperty('--insp-w', S.settings.inspW + 'px');
   refresh();

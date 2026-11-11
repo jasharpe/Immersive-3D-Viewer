@@ -282,14 +282,21 @@ export class Viewer {
     if (changed) this.onAutoRotateChange?.(on);
   }
 
-  /** Toolbar toggle: sets the default for every model and applies it to this one. */
+  /** Preference change: the default for models without a saved view, including this one. */
   setAutoRotateDefault(on) {
     this.autoRotateDefault = on;
-    if (on) {
-      // Rotating again means the user's saved angle no longer applies to this model.
-      this.userMoved = false;
-      if (this.current) this.onViewChange?.(this.currentPath, null);
-    }
+    if (this.current && !this.userMoved) this.setAutoRotate(on);
+  }
+
+  /**
+   * Toolbar toggle for the current model. Stopping keeps this angle (saved like a manual
+   * move); starting again drops the saved view so the model rotates from now on.
+   */
+  toggleAutoRotate() {
+    if (!this.current) return;
+    const on = !this.controls.autoRotate;
+    this.userMoved = !on;
+    this.onViewChange?.(this.currentPath, on ? null : this.getView());
     this.setAutoRotate(on);
   }
 

@@ -2,7 +2,7 @@
 // Responsibilities: window, the `mfile://` protocol that serves local files (app UI,
 // models, textures, thumbnails), folder scanning, persistence and OS integration.
 
-const { app, BrowserWindow, ipcMain, dialog, protocol, net, clipboard, shell } = require('electron');
+const { app, BrowserWindow, Menu, MenuItem, ipcMain, dialog, protocol, net, clipboard, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
@@ -164,6 +164,21 @@ async function scanLibrary(root, extraTextureDirs = []) {
 // Window
 
 let mainWindow = null;
+
+/** macOS: "Preferences…" (⌘,) in the app menu; the renderer opens the dialog. */
+function addPreferencesMenuItem() {
+  if (process.platform !== 'darwin') return; // elsewhere Ctrl+, and the toolbar button do it
+  const menu = Menu.getApplicationMenu();
+  const appMenu = menu?.items[0]?.submenu;
+  if (!appMenu) return;
+  appMenu.insert(1, new MenuItem({ type: 'separator' }));
+  appMenu.insert(2, new MenuItem({
+    label: 'Preferences…',
+    accelerator: 'Cmd+,',
+    click: () => mainWindow?.webContents.send('open-preferences'),
+  }));
+  Menu.setApplicationMenu(menu);
+}
 
 async function createWindow() {
   const cfg = await readJson(configPath(), {});
@@ -333,6 +348,7 @@ app.whenReady().then(async () => {
 
   registerIpc();
   await createWindow();
+  addPreferencesMenuItem();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

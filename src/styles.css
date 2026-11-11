@@ -39,8 +39,8 @@ h2, h3, h4 { margin: 0; font-weight: 600; }
 .btn.icon svg, .btn svg { width: 15px; height: 15px; flex: none; }
 .btn.on { background: #2d3e5f; border-color: var(--accent); }
 .btn.danger:hover { border-color: var(--bad); color: #ffb4ae; }
-input[type=search], input[type=text] { height: 28px; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px; padding: 0 10px; font: inherit; outline: none; }
-input[type=search]:focus, input[type=text]:focus { border-color: var(--accent); }
+input[type=search], input[type=text], input[type=number] { height: 28px; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px; padding: 0 10px; font: inherit; outline: none; }
+input[type=search]:focus, input[type=text]:focus, input[type=number]:focus { border-color: var(--accent); }
 select { height: 28px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; padding: 0 6px; }
 label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 input[type=checkbox] { accent-color: var(--accent); }
@@ -224,3 +224,14 @@ input[type=checkbox] { accent-color: var(--accent); }
 .zoo-keys { width: 100%; margin: 10px 0; border-collapse: collapse; font-size: 12px; }
 .zoo-keys td { padding: 3px 4px; border-bottom: 1px solid #2a2f38; text-align: left; }
 .zoo-keys td:first-child { font-family: ui-monospace, Menlo, Consolas, monospace; color: #ffd34d; width: 40%; }
+
+/* Preferences */
+.pref-section { margin: 14px 0 6px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.pref-section:first-child { margin-top: 0; }
+.pref { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; user-select: none; }
+.pref input { margin-top: 3px; }
+.pref .hint { display: block; margin: 2px 0 0; }
+.pref.num { justify-content: space-between; cursor: default; }
+.pref-num { display: flex; align-items: center; gap: 6px; flex: none; color: var(--muted); }
+.pref-num input { width: 70px; }
+.modal-back.prefs .modal { width: min(460px, calc(100vw - 32px)); }
