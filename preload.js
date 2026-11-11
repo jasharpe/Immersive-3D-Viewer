@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   scan: (root, extraDirs) => ipcRenderer.invoke('scan', root, extraDirs),
   libLoad: (root) => ipcRenderer.invoke('lib-load', root),
   libSave: (root, state) => ipcRenderer.invoke('lib-save', root, state),
+  libSaveSync: (root, state) => ipcRenderer.sendSync('lib-save-sync', root, state),
   thumbSave: (root, modelPath, bytes) => ipcRenderer.invoke('thumb-save', root, modelPath, bytes),
   thumbsClear: (root) => ipcRenderer.invoke('thumbs-clear', root),
   copy: (text) => ipcRenderer.invoke('clipboard', text),

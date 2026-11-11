@@ -85,6 +85,11 @@ function saveStateSoon() {
   saveTimer = setTimeout(() => { if (S.root) api.libSave(S.root, S.state); }, 1200);
 }
 
+// Flush a pending debounced save when the window closes or reloads.
+window.addEventListener('beforeunload', () => {
+  if (saveTimer && S.root) { clearTimeout(saveTimer); saveTimer = null; api.libSaveSync(S.root, S.state); }
+});
+
 function saveSettings() {
   api.configSet({ settings: S.settings, recent: S.recent });
 }

@@ -231,6 +231,20 @@ function registerIpc() {
 
   ipcMain.handle('lib-save', (_e, root, state) => writeJsonAtomic(path.join(libDir(root), 'state.json'), state));
 
+  // Synchronous save used while the window is closing, so a pending debounced save isn't lost.
+  ipcMain.on('lib-save-sync', (e, root, state) => {
+    try {
+      const file = path.join(libDir(root), 'state.json');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file + '.tmp', JSON.stringify(state));
+      fs.renameSync(file + '.tmp', file);
+      e.returnValue = true;
+    } catch (err) {
+      console.error('lib-save-sync failed', err);
+      e.returnValue = false;
+    }
+  });
+
   ipcMain.handle('thumb-save', async (_e, root, modelPath, bytes) => {
     const name = crypto.createHash('sha1').update(modelPath).digest('hex').slice(0, 24) + '.png';
     const file = path.join(libDir(root), 'thumbs', name);
