@@ -105,7 +105,9 @@ the packaged app.
    (see [TEXTURES.md §2](TEXTURES.md#2-hooking-the-loaders)).
 3. Dispatches on the file extension:
    - **GLB/glTF:** `GLTFLoader` with Draco and Meshopt decoders.
-   - **FBX:** `FBXLoader`.
+   - **FBX:** `FBXLoader`, then the file's `UnitScaleFactor` is applied (FBX stores
+     centimetres per unit; FBXLoader reads the value but doesn't apply it), so models
+     come out in metres.
    - **OBJ:** reads the text, finds `mtllib` lines (falling back to `<name>.mtl`), loads
      the materials with `MTLLoader`, then parses with `OBJLoader`.
    - **DAE:** `ColladaLoader`.
@@ -129,8 +131,10 @@ most three at once, well within Chromium's limit.
   auto-rotate is on.
 - **Zoo.** Created when you enter and fully disposed when you leave (`forceContextLoss`).
   - Layout: entries are grouped by `relDir`, `PER_ROW` per row, with rows spaced along Z.
-  - Each exhibit is normalised to `TARGET` metres, turned 180° to face the spawn side, and
-    placed on a pedestal.
+    Models are shown at real size, turned 180° to face the spawn side.
+  - Each pedestal is a unit cylinder scaled to the model's footprint. `relayout()`
+    recomputes target positions whenever a model loads (its footprint becomes known) or
+    the global scale changes (`+`/`-`/`0`). Exhibits glide to their targets in `tick()`.
   - Models load three at a time, nearest first, with wireframe placeholders until then. They
     share one texture cache.
   - The player uses `PointerLockControls` for looking. Movement, gravity, jumping, fly mode

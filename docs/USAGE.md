@@ -68,7 +68,7 @@ Click a card to load the model in the inspector on the right.
 - **Animations:** if the model has animation clips, pick one from the dropdown to play it.
 - Drag the divider to the left of the inspector to resize it.
 
-The inspector shows triangle and material counts, every texture the file references and
+The inspector shows the model's real dimensions, triangle and material counts, every texture the file references and
 where each one was found, and every material with its texture slots.
 
 ## Selecting several models
@@ -138,8 +138,11 @@ and use **Zoo with selection**. The Zoo holds up to 400 models, so for large lib
 narrow the view first with search, folders or a selection.
 
 Models stand on pedestals in rows, one row (or more) per folder, with a blue sign naming the
-folder. Every model is scaled to about two metres so tiny props and huge buildings are all
-viewable. Click **Click to walk around** to start.
+folder. Models are shown at their **real size**, using the units stored in the file. Spacing and
+pedestals adapt to each model's footprint, and neighbours slide apart as models finish
+loading. Some asset packs are modelled far larger or smaller than life. Press `=` / `+` and
+`-` / `_` to scale every model up or down together, and `0` to return to real size. The
+scale is remembered for next time. Click **Click to walk around** to start.
 
 | Key | Action |
 |---|---|
@@ -149,12 +152,15 @@ viewable. Click **Click to walk around** to start.
 | `Space` | Jump (in fly mode: go up) |
 | `F` | Toggle fly / noclip. WASD still moves horizontally; use `Space` / `C` to change height |
 | `C` | Fly down |
+| `=` / `+` | Make all models bigger (hold to repeat) |
+| `-` / `_` | Make all models smaller |
+| `0` | Back to real size |
 | Left click | Copy the path of the model under the crosshair |
 | `E` | Leave the Zoo and open the model under the crosshair in the inspector |
 | `Esc` | Release the mouse and show the menu (Resume, Exit, labels, animation) |
 
 The model you're looking at gets a gold pedestal and its name and path appear below the
-crosshair. Animated models play their first animation clip; turn this off in the `Esc` menu
+crosshair, with its real dimensions. Animated models play their first animation clip; turn this off in the `Esc` menu
 if it costs too much performance.
 
 ## Keyboard shortcuts
