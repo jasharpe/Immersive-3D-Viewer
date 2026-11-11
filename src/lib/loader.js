@@ -302,6 +302,8 @@ export async function loadModel(filePath, opts) {
 
   await Promise.race([waitIdle(), sleep(opts.timeoutMs ?? 30000)]);
 
+  const alphaFixed = fixNeedlessBlending(materials);
+
   if (pixelated) applyPixelated(object);
 
   object.updateMatrixWorld(true);
@@ -316,6 +318,7 @@ export async function loadModel(filePath, opts) {
     materials: materials.map((m) => ({ key: m.key, name: m.material.name, type: m.material.type })),
     animations: animations.map((a) => ({ name: a.name, duration: a.duration })),
     size,
+    alphaFixed,
     ...stats,
   };
 
@@ -339,6 +342,68 @@ function checkerDataUrl() {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// --- Needless alpha blending -------------------------------------------------------------
+// Exporters (notably Blender's glTF exporter with "Alpha Blend") often mark solid materials
+// as transparent. Blended materials don't write depth, so overlapping parts of one mesh draw
+// in triangle order and things behind show through things in front. If the material's
+// texture has no real translucency we render it as opaque (or as an alpha-tested cut-out).
+
+const alphaKinds = new WeakMap(); // image -> 'opaque' | 'cutout' | 'blend' | null
+
+function alphaKind(image) {
+  if (!image || !(image.width > 0) || image.data) return null; // data textures: leave alone
+  if (alphaKinds.has(image)) return alphaKinds.get(image);
+  let kind = null;
+  try {
+    const scale = Math.min(1, 512 / Math.max(image.width, image.height));
+    const w = Math.max(1, Math.round(image.width * scale));
+    const h = Math.max(1, Math.round(image.height * scale));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(image, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data;
+    let clear = 0; // pixels that aren't fully opaque
+    let partial = 0; // pixels that are neither opaque nor fully transparent
+    for (let i = 3; i < d.length; i += 4) {
+      const a = d[i];
+      if (a < 250) {
+        clear++;
+        if (a > 5) partial++;
+      }
+    }
+    // A few partial pixels along cut-out edges are normal (and come from downscaling).
+    kind = clear === 0 ? 'opaque' : partial <= clear * 0.15 ? 'cutout' : 'blend';
+  } catch (err) {
+    console.warn('alpha analysis failed', err);
+  }
+  alphaKinds.set(image, kind);
+  return kind;
+}
+
+/** Turns blended materials without real translucency into opaque/cut-out ones. Returns the count. */
+function fixNeedlessBlending(materials) {
+  let fixed = 0;
+  for (const { material: m } of materials) {
+    if (!m.transparent || m.opacity < 0.999 || m.alphaMap || m.vertexColors || m.transmission > 0) continue;
+    const kind = m.map ? (isMissingTexture(m.map) ? 'opaque' : alphaKind(m.map.image)) : 'opaque';
+    if (kind === 'opaque') {
+      m.transparent = false;
+    } else if (kind === 'cutout') {
+      m.transparent = false;
+      m.alphaTest = 0.5;
+    } else {
+      continue;
+    }
+    m.depthWrite = true;
+    m.needsUpdate = true;
+    m.userData.alphaFixed = kind;
+    fixed++;
+  }
+  return fixed;
+}
 
 /** Unique materials in traversal order, each with a stable key (its name, or #index). */
 export function collectMaterials(object) {

@@ -115,7 +115,12 @@ the packaged app.
    - **STL/PLY:** the geometry gets a default material. PLY files without faces become
      points.
 4. Runs name-based auto-matching and applies overrides.
-5. Waits for outstanding loads (with a timeout), then computes statistics.
+5. Waits for outstanding loads (with a timeout). It then checks every blended
+   (transparent) material's texture alpha. Exporters often mark solid materials as
+   "alpha blend", which stops them writing depth and makes hidden parts show through.
+   Materials whose texture has no real translucency become opaque, and pure on/off alpha
+   becomes an alpha-tested cut-out. Genuinely translucent ones (glass, cobwebs) stay
+   blended. Finally it computes statistics.
 
 It returns `{ object, animations, report, materials, loadTexture, dispose }`. `dispose()`
 frees geometries, materials and textures.

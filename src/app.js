@@ -9,7 +9,7 @@ import { icon } from './icons.js';
 import { fmtDims } from './lib/format.js';
 
 const api = window.api;
-const THUMB_VERSION = 1;
+const THUMB_VERSION = 2; // bump to re-render all thumbnails after rendering fixes
 const FORMAT_ORDER = ['.glb', '.gltf', '.fbx', '.obj', '.dae', '.3ds', '.stl', '.ply'];
 const ZOO_MAX = 400;
 const isMac = api.platform === 'darwin';
