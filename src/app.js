@@ -42,7 +42,7 @@ const S = {
 };
 
 function defaultLibState() {
-  return { version: 1, overrides: {}, remap: {}, meta: {}, textureDirs: [] };
+  return { version: 1, overrides: {}, remap: {}, meta: {}, textureDirs: [], hearts: {} };
 }
 
 const lib = () => ({ root: S.root, state: S.state });
@@ -260,6 +260,7 @@ function statusOk(m, status) {
     case 'overrides': return !!S.state.overrides[m.path];
     case 'failed': return !!meta?.error;
     case 'anims': return meta?.anims > 0;
+    case 'hearted': return !!S.state.hearts[m.path];
     default: return true;
   }
 }
@@ -335,6 +336,7 @@ function buildExtChips() {
 
 const STATUSES = [
   ['all', 'All models'],
+  ['hearted', '♥ Hearted'],
   ['missing', 'Missing textures'],
   ['overrides', 'Texture overrides'],
   ['anims', 'Has animations'],
@@ -466,6 +468,7 @@ function createCard(e) {
   el.innerHTML = `
     <div class="thumb"><img alt="" draggable="false" class="hidden"><div class="ph"></div>
       <label class="check" title="Select (${MOD}click, Shift+click for range)"><input type="checkbox" tabindex="-1"></label>
+      <button class="heart" title="Heart (H)">${icon('heart')}</button>
       <button class="copy" title="Copy path to clipboard">${icon('copy')}</button>
       <div class="badges"></div>
     </div>
@@ -501,6 +504,9 @@ function updateCard(el, e) {
 
   const badges = [];
   if (meta?.missing?.length) badges.push(`<span class="badge warn" title="Missing textures:\n${esc(meta.missing.join('\n'))}">${meta.missing.length} missing</span>`);
+  const hearted = e.variants.some((v) => isHearted(v.path));
+  el.classList.toggle('hearted', hearted);
+  el.querySelector('.heart').title = hearted ? 'Remove heart (H)' : 'Heart (H)';
   if (S.state.overrides[m.path]) badges.push('<span class="badge info" title="Has texture overrides">TEX</span>');
   if (meta?.anims) badges.push(`<span class="badge" title="${meta.anims} animation(s)">▶ ${meta.anims}</span>`);
   if (meta?.error) badges.push(`<span class="badge bad" title="${esc(meta.error)}">failed</span>`);
@@ -535,6 +541,7 @@ gridEl.addEventListener('click', (ev) => {
   const e = S.entryByKey.get(el.dataset.key);
   if (!e) return;
   if (ev.target.closest('.copy')) { copyPath(e.model.path); return; }
+  if (ev.target.closest('.heart')) { toggleHeart(e.model.path); return; }
   const fmt = ev.target.closest('.fmt');
   if (fmt) {
     S.curVariant.set(e.key, fmt.dataset.path);
@@ -601,6 +608,55 @@ function updateSelbar() {
 const selectedEntries = () => [...S.selection].map((k) => S.entryByKey.get(k)).filter(Boolean);
 /** All files behind a set of entries (every format variant), for texture operations. */
 const allVariantPaths = (entries) => entries.flatMap((e) => e.variants.map((v) => v.path));
+
+// ---------------------------------------------------------------------------- hearts
+// Hearts are stored per file path in the library state. With "Group formats" on, a model
+// counts as hearted if any of its formats is, and un-hearting clears every format.
+const isHearted = (path) => !!S.state.hearts[path];
+
+/** The files shown together with `path` on one card (all formats when grouping). */
+function variantsOf(path) {
+  const m = S.byPath.get(path);
+  if (!m) return [];
+  if (!S.settings.collapse) return [m];
+  const name = m.name.toLowerCase();
+  return S.models.filter((x) => x.top === m.top && x.name.toLowerCase() === name);
+}
+
+const isHeartedAny = (path) => variantsOf(path).some((v) => isHearted(v.path));
+
+/** Toggles the heart for a model; returns the new state. */
+function toggleHeart(path, { quiet = false } = {}) {
+  const on = !isHeartedAny(path);
+  if (on) S.state.hearts[path] = Date.now();
+  else for (const v of variantsOf(path)) delete S.state.hearts[v.path];
+  afterHeartChange();
+  if (!quiet) toast(on ? `♥ Hearted ${S.byPath.get(path)?.name}` : `Removed heart from ${S.byPath.get(path)?.name}`);
+  return on;
+}
+
+/** Hearts every given model, or un-hearts them all if they're all hearted already. */
+function heartMany(paths) {
+  const on = !paths.every(isHeartedAny);
+  for (const p of paths) {
+    if (on) { if (!isHeartedAny(p)) S.state.hearts[p] = Date.now(); }
+    else for (const v of variantsOf(p)) delete S.state.hearts[v.path];
+  }
+  afterHeartChange();
+  toast(on ? `♥ Hearted ${paths.length} model(s)` : `Removed hearts from ${paths.length} model(s)`);
+}
+
+function afterHeartChange() {
+  saveStateSoon();
+  if (S.filters.status === 'hearted') refresh();
+  else { updateAllCards(); updateStatusCounts(); }
+  const btn = insp.querySelector('[data-act="heart"]');
+  if (btn && S.active) {
+    const on = isHeartedAny(S.active);
+    btn.classList.toggle('on', on);
+    btn.innerHTML = `${icon('heart')} ${on ? 'Hearted' : 'Heart'}`;
+  }
+}
 
 // ---------------------------------------------------------------------------- texture operations
 async function opSetTextureFolder(paths) {
@@ -695,6 +751,7 @@ $('#selbar').addEventListener('click', async (ev) => {
   if (!b) return;
   const entries = selectedEntries();
   switch (b.dataset.bulk) {
+    case 'heart': heartMany(entries.map((e) => e.model.path)); break;
     case 'copy': {
       const text = entries.map((e) => e.model.path).join('\n');
       await api.copy(text);
@@ -740,6 +797,8 @@ function showCardMenu(e, x, y) {
     items.push({ label: S.selection.has(e.key) ? 'Deselect' : 'Select', run: () => toggleSelect(e) });
   }
   items.push('-',
+    { label: multi ? (targets.every((t) => isHeartedAny(t.model.path)) ? 'Remove hearts' : 'Heart all') : (isHeartedAny(e.model.path) ? 'Remove heart' : 'Heart'), run: () => (multi ? heartMany(targets.map((t) => t.model.path)) : toggleHeart(e.model.path)) },
+    '-',
     { label: 'Set texture folder…', run: () => opSetTextureFolder(paths) },
     { label: 'Apply image to all materials…', run: () => opApplyImage(paths) },
     { label: 'Reset textures', run: () => opReset(paths) },
@@ -823,6 +882,7 @@ function renderInspector(m, res, err) {
     <div class="path-row"><code>${esc(m.path)}</code></div>
     <div class="actions">
       <button class="btn primary" data-act="copy">${icon('copy')} Copy path</button>
+      <button class="btn heart-btn ${isHeartedAny(m.path) ? 'on' : ''}" data-act="heart" title="Heart (H)">${icon('heart')} ${isHeartedAny(m.path) ? 'Hearted' : 'Heart'}</button>
       <button class="btn" data-act="reveal">${icon('folder')} ${isMac ? 'Reveal' : 'Show in folder'}</button>
     </div>
     <div class="stats">${stats.join('')}</div>
@@ -905,6 +965,7 @@ insp.addEventListener('click', async (ev) => {
   const t = ev.target.closest('button, .fmt');
   if (!t) return;
   if (t.dataset.act === 'copy') return copyPath(path);
+  if (t.dataset.act === 'heart') return toggleHeart(path);
   if (t.dataset.act === 'reveal') return api.reveal(path);
   if (t.dataset.act === 'texdir') return opSetTextureFolder([path]);
   if (t.dataset.act === 'teximg') return opApplyImage([path]);
@@ -1112,6 +1173,8 @@ function enterZoo(entries = S.entries) {
     scale: S.settings.zooScale || 1,
     onScale: (scale) => { S.settings.zooScale = scale; saveSettings(); },
     onCopy: (it) => api.copy(it.path),
+    isHearted: (it) => isHeartedAny(it.path),
+    onToggleHeart: (it) => toggleHeart(it.path, { quiet: true }),
     onInspect: (it) => {
       const e = S.entries.find((x) => x.variants.some((v) => v.path === it.path));
       if (e) scrollToEntry(e);
@@ -1185,6 +1248,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (inInput) return;
   if (mod && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAll(); return; }
+  if (!mod && !e.altKey && e.key.toLowerCase() === 'h' && S.active) { e.preventDefault(); toggleHeart(S.active); return; }
   if (mod && e.key.toLowerCase() === 'c' && !window.getSelection()?.toString()) {
     e.preventDefault();
     if (S.selection.size > 1) { const t = selectedEntries().map((x) => x.model.path).join('\n'); api.copy(t); toast(`Copied ${S.selection.size} paths`); }
@@ -1223,4 +1287,4 @@ document.addEventListener('keydown', (e) => {
 })();
 
 // Exposed for automated tests / debugging (see docs/DEVELOPMENT.md).
-window.app = { S, openLibrary, openInspector, enterZoo, refresh, thumbs, opRemap, opApplyImage, opSetTextureFolder, missingTexturesModal, textureDirsModal, selectAll, clearSelection };
+window.app = { S, toggleHeart, openLibrary, openInspector, enterZoo, refresh, thumbs, opRemap, opApplyImage, opSetTextureFolder, missingTexturesModal, textureDirsModal, selectAll, clearSelection };
